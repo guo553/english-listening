@@ -1,0 +1,57 @@
+{
+  "name": "english-listening-tool",
+  "productName": "听力小工具",
+  "version": "0.0.1dev",
+  "license": "MIT",
+  "description": "英语听力高效训练工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.english-listening.tool",
+    "productName": "听力小工具",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.0.0",
+    "eslint": "^10.7.0"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.0",
+    "jsqr": "^1.4.0",
+    "marked": "^15.0.0",
+    "node-fetch": "^3.3.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

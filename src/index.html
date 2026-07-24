@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>听力小工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div id="page-home" class="page active"></div>
+    <div id="page-ready" class="page"></div>
+    <div id="page-quiz" class="page"></div>
+    <div id="page-result" class="page"></div>
+    <div id="page-settings" class="page"></div>
+    <div id="page-history" class="page"></div>
+  </div>
+
+  <div id="password-dialog" class="dialog-overlay hidden">
+    <div class="dialog-box">
+      <div class="dialog-title">输入答案密码</div>
+      <div class="dialog-desc">请输入发布者提供的密码以获取标准答案</div>
+      <input type="password" id="pwd-input" class="input" placeholder="请输入密码" style="flex:1;">
+      <button class="btn btn-secondary btn-small" id="pwd-paste" title="粘贴" style="flex-shrink:0;">📋 粘贴</button>
+      <div class="dialog-actions">
+        <button class="btn btn-secondary" id="pwd-cancel">取消</button>
+        <button class="btn btn-primary" id="pwd-confirm">确认批改</button>
+      </div>
+      <div id="pwd-error" class="text-secondary mt-8" style="color: var(--error); display: none;"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../node_modules/jsqr/dist/jsQR.js"></script>
+  <script src="../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../node_modules/dompurify/dist/purify.js"></script>
+  <script src="lib/parser.js"></script>
+  <script src="lib/qrcode.js"></script>
+  <script src="lib/md-parser.js"></script>
+  <script src="app.js"></script>
+  <script src="pages/home.js"></script>
+  <script src="pages/ready.js"></script>
+  <script src="pages/quiz.js"></script>
+  <script src="pages/result.js"></script>
+  <script src="pages/settings.js"></script>
+  <script src="pages/history.js"></script>
+</body>
+</html>
