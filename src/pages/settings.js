@@ -55,8 +55,11 @@ window.page_settings = function () {
           </div>
         </div>
 
-        <div class="text-center text-secondary mt-24" style="font-size: 13px;">
-          听力小工具 v0.0.1dev · MIT License
+        <div class="text-center mt-24" style="font-size: 13px; color: var(--text-muted); line-height: 1.8;">
+          <div>听力小工具 v0.0.1dev</div>
+          <div>作者: 郭皓玮 · MIT 许可</div>
+          <div>GitHub: <a href="#" id="about-github" style="color:var(--accent);text-decoration:none;">guo553/english-listening</a></div>
+          <div>鸣谢: <a href="#" id="about-electron" style="color:var(--accent);text-decoration:none;">Electron 框架</a></div>
         </div>
       </div>
     </div>
@@ -98,6 +101,16 @@ window.page_settings = function () {
         })
       }
     })
+  })
+
+  document.getElementById('about-github').addEventListener('click', (e) => {
+    e.preventDefault()
+    window.open('https://github.com/guo553/english-listening', '_blank')
+  })
+
+  document.getElementById('about-electron').addEventListener('click', (e) => {
+    e.preventDefault()
+    window.open('https://www.electronjs.org', '_blank')
   })
 }
 
