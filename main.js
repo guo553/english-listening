@@ -368,35 +368,15 @@ function createAppMenu() {
         {
           label: '关于听力小工具',
           click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
+            const win = new BrowserWindow({
+              width: 400, height: 460,
+              resizable: false, minimizable: false,
+              autoHideMenuBar: true,
               title: '关于 听力小工具',
-              message: '听力小工具',
-              detail: [
-                '作者: 郭皓玮',
-                '邮箱: guohaowei63@gmail.com',
-                '',
-                '协议: MIT 开源许可',
-                'GitHub: https://github.com/guo553/english-listening',
-                '',
-                '鸣谢: Electron 框架',
-                'https://www.electronjs.org',
-                '',
-                '本软件基于 MIT 协议开源，',
-                '可自由使用、修改和分发。'
-              ].join('\n'),
-              buttons: ['查看许可', '访问 GitHub', 'Electron 官网', '确定'],
-              defaultId: 3,
-              cancelId: 3
-            }).then(({ response }) => {
-              if (response === 0) {
-                shell.openPath(path.join(__dirname, 'LICENSE'))
-              } else if (response === 1) {
-                shell.openExternal('https://github.com/guo553/english-listening')
-              } else if (response === 2) {
-                shell.openExternal('https://www.electronjs.org')
-              }
+              webPreferences: { contextIsolation: true, nodeIntegration: false }
             })
+            win.loadFile(path.join(__dirname, 'src', 'about.html'))
+            win.webContents.setWindowOpenHandler(() => ({ action: 'allow' }))
           }
         },
         { type: 'separator' },
