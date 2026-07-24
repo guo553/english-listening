@@ -23,21 +23,25 @@
       "src/**/*",
       "package.json"
     ],
+    "icon": "src/icon.png",
     "linux": {
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "icon": "src/icon.png"
     },
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "icon": "src/icon.png"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "src/icon.png"
     }
   },
   "devDependencies": {
