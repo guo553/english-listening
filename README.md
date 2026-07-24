@@ -21,6 +21,16 @@
 
 从 [Releases](https://github.com/guo553/english-listening/releases) 下载最新版本。
 
+### 支持平台
+
+| 平台 | 安装包 | 说明 |
+|------|--------|------|
+| **Linux** | `.AppImage` | 通用格式，下载后 `chmod +x` 即可运行 |
+| **Windows** | `.exe` 安装包 / 免安装 `.zip` | 安装包一键安装，免安装版解压即用 |
+| **macOS** | — | 项目**完全支持 macOS**，但因开发者无 macOS 环境，无法打包签名。如有 macOS 环境，可自行编译：`npm run build:mac` |
+
+> 📌 macOS 说明：Electron 本身全平台支持，本项目的所有功能在 macOS 上均可正常运行。macOS 缺失安装包仅因**打包和签名需要 Apple 开发者账号及 macOS 环境**，非软件兼容性问题。欢迎有条件的贡献者协助打包。
+
 ## 使用
 
 1. 打开 **听力小工具**
@@ -30,11 +40,74 @@
 
 ## 开发
 
+### 环境要求
+
+| 环境 | 版本要求 | 说明 |
+|------|----------|------|
+| Node.js | >= 18 | 推荐 v20 LTS 或更高 |
+| npm | >= 9 | 随 Node.js 一同安装 |
+| Git | >= 2 | 版本控制 |
+
+### 快速开始
+
 ```bash
 git clone https://github.com/guo553/english-listening.git
 cd english-listening
 npm install
 npm start
+```
+
+### 系统配置
+
+#### Linux
+
+```bash
+# 安装 Electron 依赖（Arch Linux）
+sudo pacman -S libxss nss atk-bridge2
+
+# Ubuntu / Debian
+sudo apt install libxss1 libnss3 libatk-bridge2.0-0
+
+# Wayland 支持
+export ELECTRON_OZONE_PLATFORM_HINT=wayland
+npm start
+```
+
+> 本项目在 **Arch Linux + KDE Plasma 6 (Wayland)** 环境下开发测试。如使用 Wayland 合成器，启动时设置 `ELECTRON_OZONE_PLATFORM_HINT=wayland` 环境变量即可获得原生 Wayland 支持，避免 XWayland 转译。
+
+#### Windows
+
+```powershell
+# 安装 Node.js（推荐使用 nvm-windows 或 官方安装包）
+# https://nodejs.org
+
+# 克隆并启动
+git clone https://github.com/guo553/english-listening.git
+cd english-listening
+npm install
+npm start
+```
+
+#### macOS
+
+```bash
+# 安装 Node.js（推荐使用 nvm 或 Homebrew）
+# brew install node
+
+# 克隆并启动
+git clone https://github.com/guo553/english-listening.git
+cd english-listening
+npm install
+npm start
+```
+
+### 版本隔离
+
+Electron 安装在项目目录 `node_modules` 下（`npm install` 时本地安装），不依赖全局 Electron，实现版本隔离：
+
+```bash
+# 检查本地安装的 Electron 版本
+npx electron --version
 ```
 
 ### 跨平台打包
@@ -46,9 +119,11 @@ npm run build:linux
 # Windows → exe（需要 wine 或 Windows 环境）
 npm run build:win
 
-# macOS → dmg
+# macOS → dmg（需要 macOS 环境）
 npm run build:mac
 ```
+
+> 注意：macOS 打包需要在 macOS 系统上执行，需要 Xcode 和 Apple 开发者账号进行签名。Linux 和 Windows 的交叉编译需要对应工具（如 wine）。
 
 ## 技术栈
 
