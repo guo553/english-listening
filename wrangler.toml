@@ -1,0 +1,8 @@
+name = "english-listening-tool"
+main = "worker.js"
+compatibility_date = "2025-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 最新 Release 版本号，发新版时更新此值
+[vars]
+LATEST_TAG = "v0.2.0"

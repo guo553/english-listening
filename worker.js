@@ -35,6 +35,7 @@ function renderPage(tag) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>听力小工具 - English Listening Tool</title>
+<link rel="icon" href="/icon.png" type="image/png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f7;color:#1d1d1f;line-height:1.6}
@@ -170,11 +171,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </html>`
 }
 
+// 从 GitHub raw 反代静态资源（图标等）
+async function proxyGitHubRaw(filepath) {
+  const url = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/main/${filepath}`
+  const resp = await fetch(url, {
+    cf: { cacheTtl: 86400, cacheEverything: true }
+  })
+  if (!resp.ok) return new Response('Not Found', { status: 404 })
+  const headers = new Headers(resp.headers)
+  headers.set('Cache-Control', 'public, max-age=86400')
+  return new Response(resp.body, { status: 200, headers })
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url)
     const tag = env.LATEST_TAG || "v0.2.0"; const version = tag.replace(/^v/, "")
     const path = url.pathname
+
+    // 静态资源：从 GitHub raw 代理图标等文件
+    if (path === '/icon.png' || path === '/favicon.ico') {
+      return proxyGitHubRaw('src' + path)
+    }
 
     // 下载反代
     if (path.startsWith('/download/')) {
