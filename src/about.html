@@ -80,7 +80,7 @@ h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
 <body>
 <img class="avatar" src="icon.png" alt="图标">
 <h1>English Listening Tool</h1>
-<div class="version">v0.1.0 · MIT 许可</div>
+<div class="version" id="version-text">v0.1.0 · MIT 许可</div>
 <div class="info">
   作者: 郭皓玮<br>
   邮箱: guohaowei63@gmail.com<br>
@@ -99,6 +99,9 @@ h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
   document.getElementById('btn-license').addEventListener('click', () => {
     window.open('./license.html', '_blank', 'width=700,height=600')
   })
+  const params = new URLSearchParams(window.location.search)
+  const v = params.get('v')
+  if (v) document.getElementById('version-text').textContent = 'v' + v + ' · MIT 许可'
   document.getElementById('btn-ok').addEventListener('click', () => { window.close() })
   document.getElementById('link-github').addEventListener('click', () => {
     window.open('https://github.com/guo553/english-listening', '_blank')

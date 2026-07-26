@@ -443,7 +443,10 @@ function createAppMenu() {
               title: '关于 听力小工具',
               webPreferences: { contextIsolation: true, nodeIntegration: false }
             })
-            win.loadFile(path.join(__dirname, 'src', 'about.html'))
+            const pkg = require('./package.json')
+            win.loadFile(path.join(__dirname, 'src', 'about.html'), {
+              query: { v: pkg.version }
+            })
             win.webContents.setWindowOpenHandler(() => ({ action: 'allow' }))
           }
         },
