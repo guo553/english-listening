@@ -26,6 +26,7 @@
       "package.json"
     ],
     "icon": "src/icon.png",
+    "generateUpdatesFilesForAllChannels": false,
     "linux": {
       "target": [
         "AppImage"
