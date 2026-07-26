@@ -212,12 +212,22 @@ async function loadFullHistory() {
         const setId = btn.dataset.setId
         if (!confirm(`确定删除「${setId}」的所有练习记录吗？`)) return
 
+        // 删除该套题的所有练习记录文件
         for (const p of practiceGroups[setId].practices) {
           if (p.practiceId) {
             await window.api.storageDelete(p.practiceId).catch(() => {})
           }
         }
-        localStorage.removeItem('practice_records_' + setId)
+        // 清理缓存和索引
+        await window.api.storageDelete('summary_' + setId).catch(() => {})
+        await window.api.storageDelete('set_' + setId).catch(() => {})
+        await window.api.storageDelete('answers_' + setId).catch(() => {})
+        // 清理早期版本遗留的 {setId}.json 重复文件
+        await window.api.storageDelete(setId).catch(() => {})
+        // 从全局索引中移除此套题
+        const setsIndex = await window.api.storageLoad('__sets__') || {}
+        delete setsIndex[setId]
+        await window.api.storageSave('__sets__', setsIndex).catch(() => {})
 
         loadFullHistory()
         App.toast('已删除该题目的所有记录', 2000)
@@ -231,17 +241,16 @@ async function loadFullHistory() {
 async function exportAllToCsv() {
   try {
     let allRecords = []
-    const items = await window.api.storageList()
+    const setsIndex = await window.api.storageLoad('__sets__') || {}
+    const setIds = Object.keys(setsIndex)
 
-    for (const item of items) {
-      const key = item.filename.replace('.json', '')
-      if (!key.startsWith('summary_')) continue
+    for (const setId of setIds) {
       try {
-        const records = await window.api.storageLoad(key)
+        const records = await window.api.storageLoad('summary_' + setId)
         if (Array.isArray(records)) {
-          const setId = key.replace('summary_', '')
           for (const r of records) {
             r._setId = setId
+            r._title = setsIndex[setId].title || setId
           }
           allRecords = allRecords.concat(records)
         }

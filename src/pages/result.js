@@ -36,7 +36,7 @@ window.page_result = async function (data) {
     }
 
     try {
-      const existingRecords = JSON.parse(localStorage.getItem('practice_records_' + set.setId) || '[]')
+      const existingRecords = await getPracticeRecords(set.setId)
       record.practiceNumber = existingRecords.length + 1
     } catch {}
   }
@@ -80,9 +80,12 @@ window.page_result = async function (data) {
       return
     }
     if (id === 'btn-download-script') {
-      (record.scriptImages || []).forEach((src, idx) => {
-        const a = document.createElement('a')
-        a.href = src; a.download = '听力原文_' + (idx + 1) + '.png'; a.click()
+      const imgs = record.scriptImages || []
+      if (imgs.length === 0) return
+      window.api.saveAllImages(imgs, record.title || '听力').then(res => {
+        if (res && res.ok) {
+          App.toast(`已保存 ${res.saved.length} 张图片到 ${res.targetDir}`, 3000)
+        }
       })
       return
     }
@@ -103,13 +106,17 @@ window.page_result = async function (data) {
   })
 }
 
+// 保存练习记录：完整记录存到 practiceId.json，摘要存到 summary_{setId}.json，更新全局索引
 function savePracticeRecord(record) {
+  // 完整记录（含答案、原文等全部数据）以 practiceId 为 key 存储
   window.api.storageSave(record.practiceId, record).catch(() => {})
 
+  // 摘要记录（供成绩趋势/CSV导出使用）以 summary_{setId} 为 key，存为数组
   getPracticeRecordsFromFile(record.setId).then(records => {
     const idx = records.findIndex(r => r.practiceId === record.practiceId)
     const summary = {
       practiceId: record.practiceId,
+      title: record.title,
       timestamp: record.timestamp,
       accuracy: record.accuracy,
       correctCount: record.correctCount,
@@ -117,6 +124,7 @@ function savePracticeRecord(record) {
       timeSpent: record.timeSpent,
       practiceNumber: record.practiceNumber
     }
+    // 同一 practiceId 已存在则更新（如批改后 accuracy 从 null 变有值），否则追加
     if (idx >= 0) {
       records[idx] = { ...records[idx], ...summary }
     } else {
@@ -124,14 +132,39 @@ function savePracticeRecord(record) {
     }
     window.api.storageSave('summary_' + record.setId, records).catch(() => {})
   }).catch(() => {})
+
+  // 更新全局套题索引 __sets__.json，供主页和历史页快速读取
+  updateSetsIndex(record)
 }
 
+// 更新 __sets__.json 全局索引：key = setId, value = {title, accuracy, practiceCount, timestamp}
+// 主页 loadHistorySummary 和历史页 loadFullHistory 都依赖此索引
+async function updateSetsIndex(record) {
+  try {
+    const index = await window.api.storageLoad('__sets__') || {}
+    // 从摘要数组长度获取实际练习次数，避免重复调用导致计数错误
+    const summary = await getPracticeRecordsFromFile(record.setId)
+    index[record.setId] = {
+      title: record.title || (index[record.setId] && index[record.setId].title) || record.setId,
+      grade: record.grade || (index[record.setId] && index[record.setId].grade) || '',
+      sourceUrl: record.sourceUrl || (index[record.setId] && index[record.setId].sourceUrl) || '',
+      answerPageUrl: record.answerPageUrl || (index[record.setId] && index[record.setId].answerPageUrl) || '',
+      timestamp: record.timestamp || (index[record.setId] && index[record.setId].timestamp),
+      accuracy: record.accuracy != null ? record.accuracy : (index[record.setId] && index[record.setId].accuracy),
+      practiceCount: Array.isArray(summary) ? summary.length : (index[record.setId] && index[record.setId].practiceCount) || 1
+    }
+    await window.api.storageSave('__sets__', index)
+  } catch {}
+}
+
+// 读取某套题的练习摘要，返回 Promise（兼容旧的同步调用）
 function getPracticeRecords(setId) {
   return new Promise((resolve) => {
     getPracticeRecordsFromFile(setId).then(resolve).catch(() => resolve([]))
   })
 }
 
+// 从文件读取摘要数组 summary_{setId}.json
 async function getPracticeRecordsFromFile(setId) {
   try {
     const data = await window.api.storageLoad('summary_' + setId)
@@ -141,62 +174,176 @@ async function getPracticeRecordsFromFile(setId) {
   }
 }
 
+// 「再练一次」：优先从文件缓存 set_{setId}.json 加载套题数据
+// 有缓存则直接跳转准备页，无缓存则重新 HTTP 请求解析并缓存
 function handleRetry(record) {
   if (!record.sourceUrl) {
     App.toast('该记录无来源链接，无法重练', 2000)
     return
   }
 
-  App.toast('正在重新解析题目...', 2000)
+  App.toast('正在加载题目...', 2000)
 
-  parsePageFromUrl(record.sourceUrl).then(result => {
-    if (!result.markdown) {
-      App.toast('无法重新解析题目，请检查网络连接', 3000)
+  // 尝试从文件系统读取缓存的套题数据（第一次解析时由 startParse 缓存）
+  const tryLoadCached = window.api.storageLoad('set_' + record.setId)
+
+  tryLoadCached.then(cachedSet => {
+    if (cachedSet && cachedSet.questions && cachedSet.questions.length > 0) {
+      // 有缓存 → 直接跳转到准备页
+      setAndGo(cachedSet, record)
       return
     }
-    const parsed = parseQuestions(result.markdown)
-    if (parsed.questions.length === 0) {
-      App.toast('解析题目失败', 2000)
-      return
-    }
+    // 无缓存 → 重新请求 URL 解析，并缓存结果供下次使用
+    parsePageFromUrl(record.sourceUrl).then(result => {
+      if (!result.markdown) {
+        App.toast('无法重新解析题目，请检查网络连接', 3000)
+        return
+      }
+      const parsed = parseQuestions(result.markdown)
+      if (parsed.questions.length === 0) {
+        App.toast('解析题目失败', 2000)
+        return
+      }
+      const cached = {
+        title: result.title || record.title,
+        grade: result.grade || record.grade || '',
+        audioUrl: result.audioUrl || '',
+        questions: parsed.questions,
+        groups: parsed.groups,
+        sections: parsed.sections
+      }
+      window.api.storageSave('set_' + record.setId, cached).catch(() => {})
+      setAndGo(cached, record)
+    })
+  }).catch(() => {
+    // storageLoad 失败（文件不存在等），也走重新解析流程
+    parsePageFromUrl(record.sourceUrl).then(result => {
+      if (!result.markdown) {
+        App.toast('无法重新解析题目，请检查网络连接', 3000)
+        return
+      }
+      const parsed = parseQuestions(result.markdown)
+      if (parsed.questions.length === 0) {
+        App.toast('解析题目失败', 2000)
+        return
+      }
+      const cached = {
+        title: result.title || record.title,
+        grade: result.grade || record.grade || '',
+        audioUrl: result.audioUrl || '',
+        questions: parsed.questions,
+        groups: parsed.groups,
+        sections: parsed.sections
+      }
+      window.api.storageSave('set_' + record.setId, cached).catch(() => {})
+      setAndGo(cached, record)
+    })
+  })
 
+  // 设置 App.currentSet 并跳转到准备页
+  function setAndGo(cached, record) {
     App.currentSet = {
       setId: record.setId,
       sourceUrl: record.sourceUrl,
-      title: result.title || record.title,
-      grade: result.grade || record.grade || '',
-      audioUrl: result.audioUrl || '',
-      questionData: parsed,
+      title: cached.title,
+      grade: cached.grade || '',
+      audioUrl: cached.audioUrl || '',
+      questionData: {
+        questions: cached.questions,
+        sections: cached.sections || [],
+        groups: cached.groups || []
+      },
       answerPageUrl: record.answerPageUrl || '',
       standardAnswers: null,
       answers: null
     }
     App.navigate('ready')
-  }).catch(err => {
-    console.error('重练解析失败:', err)
-    App.toast('重新解析失败: ' + (err.message || '请检查网络连接'), 3000)
-  })
+  }
 }
 
+// 自动批改入口：优先使用本地缓存答案，其次尝试已保存密码，最后弹窗让用户输入密码
 function handleAutoGrade(record, container) {
-  window.api.storageLoad('__passwords__').then(saved => {
-    const savedPwd = saved && record.answerPageUrl ? saved[record.answerPageUrl] : null
+  const answerPageUrl = record.answerPageUrl || (App.currentSet && App.currentSet.answerPageUrl)
 
-    if (savedPwd) {
-      doGradeWithBtn(record, savedPwd)
+  // 第一优先级：检查本地是否有第一次批改时缓存的答案（answers_{setId}.json）
+  window.api.storageLoad('answers_' + record.setId).then(cached => {
+    if (cached && cached.answers && cached.answers.length > 0) {
+      // 用缓存的答案直接批改，无需联网请求答案页面
+      applyCachedAnswers(record, cached)
+      doGradeWithBtnNoFetch(record)
       return
     }
-
-    window._showPasswordDialog().then(password => {
-      if (!password) return
-      doGradeWithBtn(record, password)
+    // 第二优先级：尝试已保存的密码（前一次输入时存在 __passwords__.json 中）
+    window.api.storageLoad('__passwords__').then(saved => {
+      const savedPwd = saved && answerPageUrl ? saved[answerPageUrl] : null
+      if (savedPwd) {
+        doGradeWithBtn(record, savedPwd)
+        return
+      }
+      // 第三优先级：弹密码输入窗口
+      window._showPasswordDialog().then(password => {
+        if (!password) return
+        doGradeWithBtn(record, password)
+      })
+    }).catch(() => {
+      window._showPasswordDialog().then(password => {
+        if (!password) return
+        doGradeWithBtn(record, password)
+      })
     })
   }).catch(() => {
-    window._showPasswordDialog().then(password => {
-      if (!password) return
-      doGradeWithBtn(record, password)
+    window.api.storageLoad('__passwords__').then(saved => {
+      const savedPwd = saved && answerPageUrl ? saved[answerPageUrl] : null
+      if (savedPwd) {
+        doGradeWithBtn(record, savedPwd)
+        return
+      }
+      window._showPasswordDialog().then(password => {
+        if (!password) return
+        doGradeWithBtn(record, password)
+      })
+    }).catch(() => {
+      window._showPasswordDialog().then(password => {
+        if (!password) return
+        doGradeWithBtn(record, password)
+      })
     })
   })
+
+  // 用本地缓存的答案直接批改（不触发网络请求）
+  function applyCachedAnswers(record, cached) {
+    let correctCount = 0
+    for (const a of record.answers) {
+      const sa = cached.answers.find(s => s.no === a.no)
+      if (sa) {
+        a.correctAnswer = sa.answer
+        a.isCorrect = a.userAnswer === sa.answer
+        if (a.isCorrect) correctCount++
+      }
+    }
+    record.correctCount = correctCount
+    record.wrongCount = record.totalQuestions - correctCount
+    record.accuracy = Math.round((correctCount / record.totalQuestions) * 100)
+    record.standardAnswers = cached.answers
+    record.allGradeAnswers = cached.allGradeAnswers
+    record.scriptText = cached.scriptText || ''
+    record.scriptImages = cached.scriptImages || []
+    if (cached.grade) record.grade = cached.grade
+
+    window.api.storageSave(record.practiceId, record).catch(() => {})
+  }
+
+  function doGradeWithBtnNoFetch(record) {
+    const btn = document.getElementById('btn-grade')
+    if (btn) { btn.disabled = true; btn.textContent = '批改中...' }
+    savePracticeRecord(record)
+    renderResult(record).then(() => {
+      App.toast('批改完成！', 2000)
+    }).catch(err => {
+      App.toast('批改失败: ' + (err.message || '未知错误'), 3000)
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 自动批改' }
+    })
+  }
 
   function doGradeWithBtn(record, password) {
     const btn = document.getElementById('btn-grade')
@@ -212,6 +359,7 @@ function handleAutoGrade(record, container) {
   }
 }
 
+// 手动录入确认：从输入框收集 A/B/C 答案，调用 doManualGrade 批改
 function handleManualGradeConfirm(record, container) {
   const errorEl = document.getElementById('manual-grade-error')
   const inputs = document.querySelectorAll('.manual-ans-input')
@@ -236,6 +384,7 @@ function handleManualGradeConfirm(record, container) {
   })
 }
 
+// 渲染结果页面：显示得分、答案详情、练习趋势、录音原文等
 async function renderResult(record) {
   const container = document.getElementById('page-result')
   await initManualAnswers(record.setId)
@@ -464,8 +613,9 @@ function renderPracticeHistorySection(records, currentPracticeId) {
     </div>`
 }
 
-function showPracticeHistory(setId, title) {
-  const records = getPracticeRecords(setId)
+// 显示成绩趋势弹窗：从 summary_{setId}.json 读取所有练习记录并绘制表格
+async function showPracticeHistory(setId, title) {
+  const records = await getPracticeRecords(setId)
   const dialog = document.getElementById('practice-history-dialog')
   const content = document.getElementById('practice-history-content')
 
@@ -487,9 +637,10 @@ function showPracticeHistory(setId, title) {
             <th style="padding:8px;text-align:right;">用时</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="practice-history-body">
           ${gradedRecords.map((r, idx) => `
-            <tr style="border-bottom:1px solid var(--border-light);">
+            <tr data-practice-id="${r.practiceId}" style="border-bottom:1px solid var(--border-light);cursor:pointer;transition:background 0.15s;"
+              onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
               <td style="padding:8px;">第 ${r.practiceNumber} 次</td>
               <td style="padding:8px;color:var(--text-secondary);">${new Date(r.timestamp).toLocaleString('zh-CN')}</td>
               <td style="padding:8px;text-align:center;font-weight:600;color:${r.accuracy >= 60 ? 'var(--success)' : 'var(--error)'};">${r.accuracy}%</td>
@@ -512,12 +663,28 @@ function showPracticeHistory(setId, title) {
     `}
   `
 
+  // 表格行点击跳转到对应练习的结果页
+  const tbody = document.getElementById('practice-history-body')
+  if (tbody) {
+    tbody.addEventListener('click', async (e) => {
+      const row = e.target.closest('tr[data-practice-id]')
+      if (!row) return
+      const practiceId = row.dataset.practiceId
+      const fullRecord = await window.api.storageLoad(practiceId)
+      if (fullRecord) {
+        dialog.classList.add('hidden')
+        App.navigate('result', { record: fullRecord })
+      }
+    })
+  }
+
   dialog.classList.remove('hidden')
 }
 
-function exportToCsv(setId, title) {
+// CSV 导出：从 summary_{setId}.json 读取练习记录，导出为 UTF-8 BOM CSV 文件
+async function exportToCsv(setId, title) {
   try {
-    const records = getPracticeRecords(setId)
+    const records = await getPracticeRecords(setId)
     if (records.length === 0) {
       App.toast('没有可导出的练习记录', 2000)
       return
@@ -562,6 +729,8 @@ function exportToCsv(setId, title) {
   }
 }
 
+// 自动批改：通过答案页面 URL 获取标准答案，逐题比对，计算正确率
+// 批改完成后保存完整记录、更新摘要、缓存答案和密码
 async function doGrade(record, password) {
   const answerPageUrl = record.answerPageUrl || (App.currentSet && App.currentSet.answerPageUrl)
   if (!answerPageUrl) throw new Error('未找到答案页面链接，无法自动批改')
@@ -602,14 +771,15 @@ async function doGrade(record, password) {
   record.grade = grade
 
   try {
-    await window.api.storageSave(record.setId, record)
+    await window.api.storageSave(record.practiceId, record)
   } catch {}
 
   try {
     const records = await getPracticeRecordsFromFile(record.setId)
     const idx = records.findIndex(r => r.practiceId === record.practiceId)
     const summary = {
-      practiceId: record.practiceId, timestamp: record.timestamp,
+      practiceId: record.practiceId, title: record.title,
+      timestamp: record.timestamp,
       accuracy: record.accuracy, correctCount: record.correctCount,
       totalQuestions: record.totalQuestions, timeSpent: record.timeSpent,
       practiceNumber: record.practiceNumber
@@ -617,6 +787,17 @@ async function doGrade(record, password) {
     if (idx >= 0) records[idx] = summary
     else records.push(summary)
     await window.api.storageSave('summary_' + record.setId, records)
+  } catch {}
+
+  try {
+    await window.api.storageSave('answers_' + record.setId, {
+      answers: record.standardAnswers,
+      allGradeAnswers: record.allGradeAnswers,
+      scriptText: record.scriptText,
+      scriptImages: record.scriptImages,
+      grade: grade,
+      gradedAt: new Date().toISOString()
+    })
   } catch {}
 
   try {
@@ -726,6 +907,8 @@ function formatDuration(seconds) {
   return m + ':' + String(s).padStart(2, '0')
 }
 
+// 手动录入答案批改：用户手动为每道题输入 A/B/C，比对后计算正确率
+// 保存完整记录、更新摘要、缓存答案
 function doManualGrade(record, standardAnswers) {
   let correctCount = 0
   for (const a of record.answers) {
@@ -746,7 +929,8 @@ function doManualGrade(record, standardAnswers) {
   getPracticeRecordsFromFile(record.setId).then(records => {
     const idx = records.findIndex(r => r.practiceId === record.practiceId)
     const summary = {
-      practiceId: record.practiceId, timestamp: record.timestamp,
+      practiceId: record.practiceId, title: record.title,
+      timestamp: record.timestamp,
       accuracy: record.accuracy, correctCount: record.correctCount,
       totalQuestions: record.totalQuestions, timeSpent: record.timeSpent,
       practiceNumber: record.practiceNumber
@@ -754,6 +938,12 @@ function doManualGrade(record, standardAnswers) {
     if (idx >= 0) records[idx] = summary
     else records.push(summary)
     window.api.storageSave('summary_' + record.setId, records).catch(() => {})
+  }).catch(() => {})
+
+  window.api.storageSave('answers_' + record.setId, {
+    answers: standardAnswers,
+    grade: '',
+    gradedAt: new Date().toISOString()
   }).catch(() => {})
 }
 

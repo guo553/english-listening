@@ -333,10 +333,14 @@ ipcMain.handle('storage-load', async (_event, key) => {
 })
 
 ipcMain.handle('storage-list', async () => {
+  // 数据目录下所有 .json 文件
   const dir = getDataDir()
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'))
+  // 跳过配置文件、摘要文件、手动答案、缓存套题、缓存答案
+  const skipPrefixes = ['__', 'summary_', 'manual_', 'set_', 'answers_']
   const result = []
   for (const file of files) {
+    if (skipPrefixes.some(p => file.startsWith(p))) continue
     try {
       const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'))
       result.push({
@@ -369,6 +373,60 @@ ipcMain.handle('clear-all-data', async () => {
   return true
 })
 
+// 下载全部图片：打开一次目录选择器，批量保存所有听力原文图片
+// 防止快速重复点击导致多次弹窗
+let _savingImages = false
+ipcMain.handle('save-all-images', async (_event, { images, title }) => {
+  if (_savingImages) return { ok: false, reason: 'busy' }
+  _savingImages = true
+  try {
+    // 弹出系统目录选择对话框
+    const dir = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: '选择保存听力原文图片的文件夹'
+  })
+  if (dir.canceled || !dir.filePaths[0]) return { ok: false, reason: 'canceled' }
+
+  // 用户选择的目录
+  const outDir = dir.filePaths[0]
+  const saved = []
+
+  // 逐张保存：data URL 直接解码写入，http URL 先下载再写入
+  // 文件名格式：{题目名}听力原文{序号}.{扩展名}
+  for (let i = 0; i < images.length; i++) {
+    const src = images[i]
+    const ext = src.startsWith('data:') ? src.split(';')[0].split('/')[1] || 'png' : 'png'
+    const filename = `${title.replace(/[^\w\u4e00-\u9fa5]/g, '_')}听力原文${i}.${ext}`
+    const filePath = path.join(outDir, filename)
+
+    try {
+      if (src.startsWith('data:')) {
+        const matches = src.match(/^data:([^;]+);base64,(.+)$/)
+        if (!matches) continue
+        fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'))
+      } else if (src.startsWith('http')) {
+        const buffer = await new Promise((resolve, reject) => {
+          const chunks = []
+          const request = net.request(src)
+          request.on('response', (res) => {
+            res.on('data', (chunk) => chunks.push(chunk))
+            res.on('end', () => resolve(Buffer.concat(chunks)))
+            res.on('error', reject)
+          })
+          request.on('error', reject)
+          request.end()
+        })
+        fs.writeFileSync(filePath, buffer)
+      }
+      saved.push(filename)
+    } catch {}
+  }
+
+  return { ok: true, saved, targetDir: outDir }
+  } finally {
+    _savingImages = false
+  }
+})
 
 function createAppMenu() {
   const template = [

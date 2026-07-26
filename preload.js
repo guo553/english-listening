@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   storageList: () => ipcRenderer.invoke('storage-list'),
   storageDelete: (key) => ipcRenderer.invoke('storage-delete', key),
   clearAllData: () => ipcRenderer.invoke('clear-all-data'),
+  saveAllImages: (images, title) => ipcRenderer.invoke('save-all-images', { images, title }),
   storageSave: (key, data) => ipcRenderer.invoke('storage-save', { key, data }),
   storageLoad: (key) => ipcRenderer.invoke('storage-load', key),
   storageList: () => ipcRenderer.invoke('storage-list'),
