@@ -3,6 +3,7 @@
   "productName": "English Listening Tool",
   "version": "0.2.0",
   "license": "MIT",
+  "author": "guo553 <guo553@users.noreply.github.com>",
   "description": "英语听力高效训练工具",
   "main": "main.js",
   "repository": "https://github.com/guo553/english-listening.git",

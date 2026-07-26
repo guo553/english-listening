@@ -57,6 +57,7 @@ jobs:
   mac:
     needs: release
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,7 +71,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mac
-          path: dist/*.{dmg,zip}
+          path: dist/*
 
   publish:
     needs: [release, linux, win, mac]
@@ -99,8 +100,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/linux/*.{AppImage,deb}
-            artifacts/win/*.{exe,msi}
-            artifacts/mac/*.{dmg,zip}
+            artifacts/linux/*
+            artifacts/win/*
+            artifacts/mac/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
