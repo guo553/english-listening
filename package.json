@@ -33,8 +33,7 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "icon": "src/icon.png"
     },
