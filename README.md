@@ -124,6 +124,26 @@ sudo xattr -rd com.apple.quarantine "/Applications/English Listening Tool.app"
 
 > 这不是安全问题，仅因应用未购买 Apple 开发者证书签名。
 
+### 数据存储位置
+
+设置、练习记录、答案密码等数据存储在系统用户数据目录下：
+
+| 平台 | 路径 |
+|------|------|
+| **Linux** | `~/.config/english-listening-tool/听力小工具数据/` |
+| **Windows** | `%APPDATA%/english-listening-tool/听力小工具数据/` |
+| **macOS** | `~/Library/Application Support/english-listening-tool/听力小工具数据/` |
+
+| 文件 | 内容 |
+|------|------|
+| `__settings__.json` | 界面设置（缩放、字体、延迟、主题） |
+| `__passwords__.json` | 答案页面 URL → 密码 |
+| `summary_{题目ID}.json` | 某题目的所有练习记录摘要 |
+| `manual_{题目ID}.json` | 手动录入的答案 |
+| `{练习ID}.json` | 完整练习记录（答案、原文等） |
+
+> 可在程序内「设置 → 数据管理 → 清除所有数据」一键删除上述全部文件。
+
 ### 版本隔离
 
 Electron 安装在项目目录 `node_modules` 下（`npm install` 时本地安装），不依赖全局 Electron，实现版本隔离：
