@@ -3,6 +3,11 @@ main = "worker.js"
 compatibility_date = "2025-07-01"
 compatibility_flags = ["nodejs_compat"]
 
+# 自定义域名（需域名托管在 Cloudflare 且开启代理；若不在 Cloudflare 可改用 CNAME 到 workers.dev）
+routes = [
+  { pattern = "softwareguo.dpdns.org", custom_domain = true }
+]
+
 # 最新 Release 版本号，发新版时更新此值
 [vars]
 LATEST_TAG = "v0.2.0"
