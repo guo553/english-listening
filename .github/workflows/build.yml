@@ -67,10 +67,30 @@ jobs:
       - run: npm ci
       - name: Build Windows
         run: npx electron-builder --win --publish never
+      - name: Generate latest.yml (Windows)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/*.exe | Select-Object -First 1
+          $hex = (Get-FileHash $exe.FullName -Algorithm SHA512).Hash
+          $bytes = for ($i = 0; $i -lt $hex.Length; $i += 2) { [Convert]::ToByte($hex.Substring($i, 2), 16) }
+          $b64 = [Convert]::ToBase64String($bytes)
+          $size = $exe.Length
+          @"
+          version: ${{ needs.release.outputs.version }}
+          files:
+            - url: $($exe.Name)
+              sha512: $b64
+              size: $size
+          path: $($exe.Name)
+          sha512: $b64
+          releaseDate: $(Get-Date -Format "yyyy-MM-ddTHH:mm:ss.000Z")
+          "@ | Out-File -FilePath dist/latest.yml -Encoding utf8NoBOM
       - uses: actions/upload-artifact@v4
         with:
           name: win
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/latest.yml
 
   mac:
     needs: release
@@ -85,10 +105,29 @@ jobs:
       - run: npm ci
       - name: Build macOS
         run: npx electron-builder --mac --publish never
+      - name: Generate latest-mac.yml
+        run: |
+          DMG=$(ls dist/*.dmg 2>/dev/null | head -1)
+          if [ -n "$DMG" ]; then
+            SIZE=$(stat -f%z "$DMG")
+            SHA=$(shasum -a 512 "$DMG" | cut -d' ' -f1 | xxd -r -p | base64)
+            cat > dist/latest-mac.yml << EOF
+          version: ${{ needs.release.outputs.version }}
+          files:
+            - url: $(basename "$DMG")
+              sha512: ${SHA}
+              size: ${SIZE}
+          path: $(basename "$DMG")
+          sha512: ${SHA}
+          releaseDate: $(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          EOF
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: mac
-          path: dist/*.dmg
+          path: |
+            dist/*.dmg
+            dist/latest-mac.yml
 
   publish:
     needs: [release, linux, win, mac]
