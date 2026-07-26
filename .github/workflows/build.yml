@@ -8,6 +8,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -28,13 +31,29 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npx electron-builder --linux --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Linux AppImage
+        run: npx electron-builder --linux --publish never
+      - name: Generate latest-linux.yml
+        run: |
+          APPIMAGE=$(ls dist/*.AppImage | head -1)
+          SIZE=$(stat -c%s "$APPIMAGE")
+          SHA=$(sha512sum "$APPIMAGE" | cut -d' ' -f1 | xxd -r -p | base64 -w0)
+          cat > dist/latest-linux.yml << EOF
+          version: ${{ needs.release.outputs.version }}
+          files:
+            - url: $(basename "$APPIMAGE")
+              sha512: ${SHA}
+              size: ${SIZE}
+          path: $(basename "$APPIMAGE")
+          sha512: ${SHA}
+          releaseDate: $(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          EOF
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: dist/*.AppImage
+          path: |
+            dist/*.AppImage
+            dist/latest-linux.yml
 
   win:
     needs: release
@@ -46,13 +65,12 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npx electron-builder --win --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows
+        run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: win
-          path: dist/*.{exe,msi}
+          path: dist/*.exe
 
   mac:
     needs: release
@@ -65,13 +83,12 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npx electron-builder --mac --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build macOS
+        run: npx electron-builder --mac --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: mac
-          path: dist/*
+          path: dist/*.dmg
 
   publish:
     needs: [release, linux, win, mac]
@@ -82,21 +99,23 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: List artifacts
+        run: find artifacts -type f -ls
+
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.release.outputs.version }}
           name: v${{ needs.release.outputs.version }}
           body: |
-            ## 更新内容
-
-            请查看 [commits](https://github.com/guo553/english-listening/commits/main) 了解详情。
+            ## v${{ needs.release.outputs.version }}
 
             ### 下载
 
-            - **Windows**: `.exe` 安装包
-            - **Linux**: `.AppImage` / `.deb`
-            - **macOS**: `.dmg`
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | Linux | `.AppImage` | `chmod +x` 后即可运行 |
+            | Windows | `.exe` | 一键安装 |
+            | macOS | `.dmg` | 未签名，首次打开需右键 → 打开 |
           draft: false
           prerelease: false
           files: |
