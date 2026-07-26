@@ -7,5 +7,13 @@ contextBridge.exposeInMainWorld('api', {
   storageSave: (key, data) => ipcRenderer.invoke('storage-save', { key, data }),
   storageLoad: (key) => ipcRenderer.invoke('storage-load', key),
   storageList: () => ipcRenderer.invoke('storage-list'),
-  storageDelete: (key) => ipcRenderer.invoke('storage-delete', key)
+  storageDelete: (key) => ipcRenderer.invoke('storage-delete', key),
+  clearAllData: () => ipcRenderer.invoke('clear-all-data'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback) => {
+    const handler = (_event, data) => callback(data)
+    ipcRenderer.on('update-status', handler)
+    return () => ipcRenderer.removeListener('update-status', handler)
+  }
 })

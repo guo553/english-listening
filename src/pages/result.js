@@ -1,4 +1,4 @@
-window.page_result = function (data) {
+window.page_result = async function (data) {
   const container = document.getElementById('page-result')
   const set = App.currentSet
   const isFromHistory = data && data.record
@@ -8,7 +8,9 @@ window.page_result = function (data) {
   if (isFromHistory) {
     record = data.record
   } else if (set && set.answers) {
+    const practiceId = 'practice_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)
     record = {
+      practiceId: practiceId,
       setId: set.setId,
       title: set.title,
       grade: set.grade || '',
@@ -29,8 +31,14 @@ window.page_result = function (data) {
       scriptText: null,
       scriptImages: [],
       settingDelay: set.settingDelay || 0,
-      settingSkip: set.settingSkip || 0
+      settingSkip: set.settingSkip || 0,
+      practiceNumber: 1
     }
+
+    try {
+      const existingRecords = JSON.parse(localStorage.getItem('practice_records_' + set.setId) || '[]')
+      record.practiceNumber = existingRecords.length + 1
+    } catch {}
   }
 
   if (!record) {
@@ -38,13 +46,12 @@ window.page_result = function (data) {
     return
   }
 
-  renderResult(record)
+  renderResult(record).then(() => {
+    if (!isFromHistory) {
+      savePracticeRecord(record)
+    }
+  })
 
-  if (!isFromHistory) {
-    window.api.storageSave(record.setId, record).catch(() => {})
-  }
-
-  // 事件委托：监听整个容器的点击事件
   container.addEventListener('click', handleResultClick)
 
   function handleResultClick(e) {
@@ -79,9 +86,16 @@ window.page_result = function (data) {
       })
       return
     }
+    if (id === 'btn-view-history') {
+      showPracticeHistory(record.setId, record.title)
+      return
+    }
+    if (id === 'btn-export-csv') {
+      exportToCsv(record.setId, record.title)
+      return
+    }
   }
 
-  // 手动输入自动大写
   container.addEventListener('input', (e) => {
     if (e.target.classList.contains('manual-ans-input')) {
       e.target.value = e.target.value.toUpperCase().replace(/[^A-C]/g, '')
@@ -89,38 +103,113 @@ window.page_result = function (data) {
   })
 }
 
-function handleRetry(record) {
-  if (record.sourceUrl) {
-    parsePageFromUrl(record.sourceUrl).then(result => {
-      if (!result.markdown) { App.toast('无法重新解析题目', 2000); return }
-      const parsed = parseQuestions(result.markdown)
-      if (parsed.questions.length === 0) { App.toast('解析题目失败', 2000); return }
-      App.currentSet = {
-        setId: record.setId, sourceUrl: record.sourceUrl,
-        title: result.title || record.title, grade: result.grade || record.grade || '',
-        audioUrl: result.audioUrl || '', questionData: parsed,
-        answerPageUrl: record.answerPageUrl || '', standardAnswers: null, answers: null
-      }
-      App.navigate('ready')
-    }).catch(() => App.toast('重新解析失败', 2000))
-  } else {
-    App.navigate('ready')
+function savePracticeRecord(record) {
+  window.api.storageSave(record.practiceId, record).catch(() => {})
+
+  getPracticeRecordsFromFile(record.setId).then(records => {
+    const idx = records.findIndex(r => r.practiceId === record.practiceId)
+    const summary = {
+      practiceId: record.practiceId,
+      timestamp: record.timestamp,
+      accuracy: record.accuracy,
+      correctCount: record.correctCount,
+      totalQuestions: record.totalQuestions,
+      timeSpent: record.timeSpent,
+      practiceNumber: record.practiceNumber
+    }
+    if (idx >= 0) {
+      records[idx] = { ...records[idx], ...summary }
+    } else {
+      records.push(summary)
+    }
+    window.api.storageSave('summary_' + record.setId, records).catch(() => {})
+  }).catch(() => {})
+}
+
+function getPracticeRecords(setId) {
+  return new Promise((resolve) => {
+    getPracticeRecordsFromFile(setId).then(resolve).catch(() => resolve([]))
+  })
+}
+
+async function getPracticeRecordsFromFile(setId) {
+  try {
+    const data = await window.api.storageLoad('summary_' + setId)
+    return data || []
+  } catch {
+    return []
   }
 }
 
+function handleRetry(record) {
+  if (!record.sourceUrl) {
+    App.toast('该记录无来源链接，无法重练', 2000)
+    return
+  }
+
+  App.toast('正在重新解析题目...', 2000)
+
+  parsePageFromUrl(record.sourceUrl).then(result => {
+    if (!result.markdown) {
+      App.toast('无法重新解析题目，请检查网络连接', 3000)
+      return
+    }
+    const parsed = parseQuestions(result.markdown)
+    if (parsed.questions.length === 0) {
+      App.toast('解析题目失败', 2000)
+      return
+    }
+
+    App.currentSet = {
+      setId: record.setId,
+      sourceUrl: record.sourceUrl,
+      title: result.title || record.title,
+      grade: result.grade || record.grade || '',
+      audioUrl: result.audioUrl || '',
+      questionData: parsed,
+      answerPageUrl: record.answerPageUrl || '',
+      standardAnswers: null,
+      answers: null
+    }
+    App.navigate('ready')
+  }).catch(err => {
+    console.error('重练解析失败:', err)
+    App.toast('重新解析失败: ' + (err.message || '请检查网络连接'), 3000)
+  })
+}
+
 function handleAutoGrade(record, container) {
-  window._showPasswordDialog().then(password => {
-    if (!password) return
+  window.api.storageLoad('__passwords__').then(saved => {
+    const savedPwd = saved && record.answerPageUrl ? saved[record.answerPageUrl] : null
+
+    if (savedPwd) {
+      doGradeWithBtn(record, savedPwd)
+      return
+    }
+
+    window._showPasswordDialog().then(password => {
+      if (!password) return
+      doGradeWithBtn(record, password)
+    })
+  }).catch(() => {
+    window._showPasswordDialog().then(password => {
+      if (!password) return
+      doGradeWithBtn(record, password)
+    })
+  })
+
+  function doGradeWithBtn(record, password) {
     const btn = document.getElementById('btn-grade')
     if (btn) { btn.disabled = true; btn.textContent = '批改中...' }
     doGrade(record, password).then(() => {
-      renderResult(record)
+      return renderResult(record)
+    }).then(() => {
       App.toast('批改完成！', 2000)
     }).catch(err => {
       App.toast('批改失败: ' + (err.message || '未知错误'), 3000)
       if (btn) { btn.disabled = false; btn.textContent = '🔍 自动批改' }
     })
-  })
+  }
 }
 
 function handleManualGradeConfirm(record, container) {
@@ -142,14 +231,18 @@ function handleManualGradeConfirm(record, container) {
   }
   document.getElementById('manual-grade-dialog').classList.add('hidden')
   doManualGrade(record, standardAnswers)
-  renderResult(record)
-  App.toast('批改完成！', 2000)
+  renderResult(record).then(() => {
+    App.toast('批改完成！', 2000)
+  })
 }
 
-function renderResult(record) {
+async function renderResult(record) {
   const container = document.getElementById('page-result')
+  await initManualAnswers(record.setId)
   const hasGrade = record.accuracy != null
   const hasAnswerUrl = record.answerPageUrl || (App.currentSet && App.currentSet.answerPageUrl)
+  const practiceRecords = await getPracticeRecords(record.setId)
+  const practiceCount = practiceRecords.length
 
   const gradeBadge = record.grade
     ? `<span style="display:inline-block;padding:2px 10px;border-radius:4px;background:var(--accent-light);color:var(--accent);font-size:13px;font-weight:500;margin-left:8px;">${escHtml(record.grade)}</span>`
@@ -174,6 +267,12 @@ function renderResult(record) {
         ${record.settingDelay ? '· 延迟 ' + record.settingDelay + 's' : ''}
         ${record.settingSkip ? '· 跳过 ' + record.settingSkip + 's' : ''}
       </div>` : ''}
+      ${practiceCount > 1 ? `
+        <div class="mt-8" style="font-size:13px;color:var(--accent);">
+          第 ${record.practiceNumber || 1} 次练习 · 共 ${practiceCount} 次
+          ${getProgressText(practiceRecords, record.accuracy)}
+        </div>
+      ` : ''}
     </div>` : ''
 
   const answersHtml = record.answers.map(a => {
@@ -189,12 +288,31 @@ function renderResult(record) {
           <span style="flex-shrink:0;">${statusIcon}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:500;font-size:14px;line-height:1.5;">${a.no}. ${escHtml(a.text)}</div>
-            <div class="text-secondary" style="font-size:13px;margin-top:4px;">${userText}</div>
-            ${correctText}
+            ${showCorrect ? `
+              <div style="display:flex;gap:12px;margin-top:4px;font-size:13px;">
+                <span class="text-secondary">${userText}</span>
+                ${correctText}
+              </div>
+              <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">
+                ${a.options.map((opt, idx) => {
+                  const letter = String.fromCharCode(65 + idx)
+                  const isUserChoice = a.userAnswer === letter
+                  const isCorrect = a.correctAnswer === letter
+                  let bg = ''
+                  if (isCorrect) bg = 'var(--success-bg)'
+                  else if (isUserChoice && !isCorrect) bg = 'var(--error-bg)'
+                  return `<span style="padding:2px 8px;border-radius:4px;font-size:12px;background:${bg};border:1px solid ${isCorrect ? 'var(--success)' : isUserChoice ? 'var(--error)' : 'var(--border-light)'};">${letter}. ${escHtml(opt)}</span>`
+                }).join('')}
+              </div>
+            ` : `
+              <div class="text-secondary" style="font-size:13px;margin-top:4px;">${userText}</div>
+            `}
           </div>
         </div>
       </div>`
   }).join('')
+
+  const historySection = practiceCount > 1 ? renderPracticeHistorySection(practiceRecords, record.practiceId) : ''
 
   const scriptSection = (record.scriptText || (record.scriptImages && record.scriptImages.length > 0)) ? `
     <div class="card mt-16">
@@ -220,7 +338,11 @@ function renderResult(record) {
     <div class="page-header">
       <button class="btn btn-secondary btn-small" id="result-home">🏠 主页</button>
       <div class="page-title">答题结果</div>
-      <button class="btn btn-secondary btn-small" id="result-retry">🔄 再练一次</button>
+      <div style="display:flex;gap:6px;">
+        ${practiceCount > 0 ? '<button class="btn btn-secondary btn-small" id="btn-view-history">📊 成绩趋势</button>' : ''}
+        ${practiceCount > 0 ? '<button class="btn btn-secondary btn-small" id="btn-export-csv">📥 导出CSV</button>' : ''}
+        <button class="btn btn-secondary btn-small" id="result-retry">🔄 再练一次</button>
+      </div>
     </div>
     <div class="page-scroll">
       <div class="page-content">
@@ -238,6 +360,7 @@ function renderResult(record) {
           <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">答题详情</h3>
           ${answersHtml}
         </div>
+        ${historySection}
         ${scriptSection}
 
         <div id="manual-grade-dialog" class="dialog-overlay hidden">
@@ -263,9 +386,180 @@ function renderResult(record) {
             <div id="manual-grade-error" class="text-secondary mt-8" style="color:var(--error);display:none;"></div>
           </div>
         </div>
+
+        <div id="practice-history-dialog" class="dialog-overlay hidden">
+          <div class="dialog-box" style="width:600px;max-height:80vh;overflow-y:auto;">
+            <div class="dialog-title">📊 练习成绩趋势</div>
+            <div id="practice-history-content" style="margin-top:12px;"></div>
+            <div class="dialog-actions">
+              <button class="btn btn-secondary" id="history-dialog-close">关闭</button>
+              <button class="btn btn-primary" id="btn-export-csv-dialog">📥 导出 CSV</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `
+
+  const historyDialogClose = document.getElementById('history-dialog-close')
+  if (historyDialogClose) {
+    historyDialogClose.addEventListener('click', () => {
+      document.getElementById('practice-history-dialog').classList.add('hidden')
+    })
+  }
+
+  const exportCsvDialog = document.getElementById('btn-export-csv-dialog')
+  if (exportCsvDialog) {
+    exportCsvDialog.addEventListener('click', () => {
+      exportToCsv(record.setId, record.title)
+    })
+  }
+}
+
+function getProgressText(records, currentAccuracy) {
+  if (records.length < 2) return ''
+  const gradedRecords = records.filter(r => r.accuracy != null)
+  if (gradedRecords.length < 2) return ''
+  const sorted = [...gradedRecords].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+  const firstAcc = sorted[0].accuracy
+  const lastAcc = sorted[sorted.length - 1].accuracy
+  const diff = lastAcc - firstAcc
+  if (diff > 0) return `↑ 提升 ${diff}%`
+  if (diff < 0) return `↓ 下降 ${Math.abs(diff)}%`
+  return '持平'
+}
+
+function renderPracticeHistorySection(records, currentPracticeId) {
+  const sorted = [...records].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+  const gradedRecords = sorted.filter(r => r.accuracy != null)
+
+  if (gradedRecords.length < 2) return ''
+
+  const maxAccuracy = Math.max(...gradedRecords.map(r => r.accuracy))
+
+  return `
+    <div class="card mt-16">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;">📈 练习记录 (${gradedRecords.length} 次)</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${gradedRecords.map((r, idx) => {
+          const isCurrent = r.practiceId === currentPracticeId
+          const barWidth = maxAccuracy > 0 ? (r.accuracy / maxAccuracy * 100) : 0
+          const prevAcc = idx > 0 ? gradedRecords[idx - 1].accuracy : null
+          const diff = prevAcc != null ? r.accuracy - prevAcc : null
+          return `
+            <div style="flex:1;min-width:120px;padding:10px;border-radius:8px;border:2px solid ${isCurrent ? 'var(--accent)' : 'var(--border-light)'};background:${isCurrent ? 'var(--accent-light)' : 'transparent'};">
+              <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px;">第${r.practiceNumber}次</div>
+              <div style="font-size:20px;font-weight:700;color:${r.accuracy >= 60 ? 'var(--success)' : 'var(--error)'};">${r.accuracy}%</div>
+              <div style="height:4px;background:var(--border-light);border-radius:2px;margin:6px 0;overflow:hidden;">
+                <div style="height:100%;width:${barWidth}%;background:${r.accuracy >= 60 ? 'var(--success)' : 'var(--error)'};border-radius:2px;"></div>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);">
+                ${new Date(r.timestamp).toLocaleDateString('zh-CN')}
+                ${diff != null ? (diff > 0 ? `<span style="color:var(--success);">+${diff}%</span>` : diff < 0 ? `<span style="color:var(--error);">${diff}%</span>` : '') : ''}
+              </div>
+            </div>
+          `
+        }).join('')}
+      </div>
+    </div>`
+}
+
+function showPracticeHistory(setId, title) {
+  const records = getPracticeRecords(setId)
+  const dialog = document.getElementById('practice-history-dialog')
+  const content = document.getElementById('practice-history-content')
+
+  if (!dialog || !content) return
+
+  const sorted = [...records].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+  const gradedRecords = sorted.filter(r => r.accuracy != null)
+
+  content.innerHTML = `
+    <h4 style="font-size:14px;margin-bottom:12px;">${escHtml(title)}</h4>
+    ${gradedRecords.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无已批改的练习记录</p>' : `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="padding:8px;text-align:left;">次数</th>
+            <th style="padding:8px;text-align:left;">日期</th>
+            <th style="padding:8px;text-align:center;">正确率</th>
+            <th style="padding:8px;text-align:center;">正确/总数</th>
+            <th style="padding:8px;text-align:right;">用时</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${gradedRecords.map((r, idx) => `
+            <tr style="border-bottom:1px solid var(--border-light);">
+              <td style="padding:8px;">第 ${r.practiceNumber} 次</td>
+              <td style="padding:8px;color:var(--text-secondary);">${new Date(r.timestamp).toLocaleString('zh-CN')}</td>
+              <td style="padding:8px;text-align:center;font-weight:600;color:${r.accuracy >= 60 ? 'var(--success)' : 'var(--error)'};">${r.accuracy}%</td>
+              <td style="padding:8px;text-align:center;">${r.correctCount}/${r.totalQuestions}</td>
+              <td style="padding:8px;text-align:right;color:var(--text-secondary);">${formatDuration(r.timeSpent)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${gradedRecords.length > 1 ? `
+        <div style="margin-top:16px;padding:12px;background:var(--accent-light);border-radius:8px;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">统计摘要</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;">
+            <div><span style="color:var(--text-secondary);">最高:</span> <strong>${Math.max(...gradedRecords.map(r=>r.accuracy))}%</strong></div>
+            <div><span style="color:var(--text-secondary);">最低:</span> <strong>${Math.min(...gradedRecords.map(r=>r.accuracy))}%</strong></div>
+            <div><span style="color:var(--text-secondary);">平均:</span> <strong>${Math.round(gradedRecords.reduce((sum,r)=>sum+r.accuracy,0)/gradedRecords.length)}%</strong></div>
+          </div>
+        </div>
+      ` : ''}
+    `}
+  `
+
+  dialog.classList.remove('hidden')
+}
+
+function exportToCsv(setId, title) {
+  try {
+    const records = getPracticeRecords(setId)
+    if (records.length === 0) {
+      App.toast('没有可导出的练习记录', 2000)
+      return
+    }
+
+    const sorted = [...records].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+
+    const BOM = '\uFEFF'
+    const headers = ['序号', '题目名称', '练习日期', '正确率(%)', '正确数', '总题数', '用时(秒)', '延迟(s)', '跳过(s)']
+    const rows = sorted.map((r, idx) => [
+      idx + 1,
+      `"${title.replace(/"/g, '""')}"`,
+      new Date(r.timestamp).toLocaleString('zh-CN'),
+      r.accuracy ?? '',
+      r.correctCount ?? '',
+      r.totalQuestions ?? '',
+      r.timeSpent ?? '',
+      '', ''
+    ])
+
+    const csvContent = BOM + [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${title.replace(/[^\w\u4e00-\u9fa5]/g, '_')}_练习记录.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    App.toast(`已导出 ${sorted.length} 条练习记录`, 2000)
+
+    const dialog = document.getElementById('practice-history-dialog')
+    if (dialog && !dialog.classList.contains('hidden')) {
+      dialog.classList.add('hidden')
+    }
+  } catch (err) {
+    console.error('CSV 导出失败:', err)
+    App.toast('导出失败: ' + err.message, 3000)
+  }
 }
 
 async function doGrade(record, password) {
@@ -309,6 +603,26 @@ async function doGrade(record, password) {
 
   try {
     await window.api.storageSave(record.setId, record)
+  } catch {}
+
+  try {
+    const records = await getPracticeRecordsFromFile(record.setId)
+    const idx = records.findIndex(r => r.practiceId === record.practiceId)
+    const summary = {
+      practiceId: record.practiceId, timestamp: record.timestamp,
+      accuracy: record.accuracy, correctCount: record.correctCount,
+      totalQuestions: record.totalQuestions, timeSpent: record.timeSpent,
+      practiceNumber: record.practiceNumber
+    }
+    if (idx >= 0) records[idx] = summary
+    else records.push(summary)
+    await window.api.storageSave('summary_' + record.setId, records)
+  } catch {}
+
+  try {
+    const existing = await window.api.storageLoad('__passwords__') || {}
+    existing[record.answerPageUrl] = password
+    window.api.storageSave('__passwords__', existing).catch(() => {})
   } catch {}
 }
 
@@ -427,23 +741,45 @@ function doManualGrade(record, standardAnswers) {
   record.accuracy = Math.round((correctCount / record.totalQuestions) * 100)
   record.standardAnswers = standardAnswers
 
-  window.api.storageSave(record.setId, record).catch(() => {})
+  window.api.storageSave(record.practiceId, record).catch(() => {})
+
+  getPracticeRecordsFromFile(record.setId).then(records => {
+    const idx = records.findIndex(r => r.practiceId === record.practiceId)
+    const summary = {
+      practiceId: record.practiceId, timestamp: record.timestamp,
+      accuracy: record.accuracy, correctCount: record.correctCount,
+      totalQuestions: record.totalQuestions, timeSpent: record.timeSpent,
+      practiceNumber: record.practiceNumber
+    }
+    if (idx >= 0) records[idx] = summary
+    else records.push(summary)
+    window.api.storageSave('summary_' + record.setId, records).catch(() => {})
+  }).catch(() => {})
 }
 
 function loadManualAnswer(setId, no) {
   try {
-    const data = JSON.parse(localStorage.getItem('manual_ans_' + setId) || '{}')
-    return data[no] || ''
+    return window._manualAnswers && window._manualAnswers[setId] && window._manualAnswers[setId][no] || ''
   } catch { return '' }
 }
 
 function saveManualAnswer(setId, no, val) {
-  try {
-    const key = 'manual_ans_' + setId
-    const data = JSON.parse(localStorage.getItem(key) || '{}')
-    data[no] = val
-    localStorage.setItem(key, JSON.stringify(data))
-  } catch {}
+  if (!window._manualAnswers) window._manualAnswers = {}
+  if (!window._manualAnswers[setId]) window._manualAnswers[setId] = {}
+  window._manualAnswers[setId][no] = val
+  window.api.storageSave('manual_' + setId, window._manualAnswers[setId]).catch(() => {})
+}
+
+async function initManualAnswers(setId) {
+  if (!window._manualAnswers) window._manualAnswers = {}
+  if (!window._manualAnswers[setId]) {
+    try {
+      const data = await window.api.storageLoad('manual_' + setId)
+      window._manualAnswers[setId] = data || {}
+    } catch {
+      window._manualAnswers[setId] = {}
+    }
+  }
 }
 
 function escHtml(str) {

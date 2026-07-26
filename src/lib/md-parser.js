@@ -12,6 +12,7 @@ function parseQuestions(markdown) {
   const sections = []
   const groups = []
   let currentQuestion = null
+  let lastGroupIndex = -1
 
   const sectionNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
@@ -31,11 +32,34 @@ function parseQuestions(markdown) {
       continue
     }
 
-    const groupMatch = trimmed.match(/^\*\*(听第\d+段录音.*?)\*\*$/)
+    const groupMatch = trimmed.match(/^\*\*(听第(\d+)段录音.*?(?:回答第\s*(\d+)\s*至?\s*第\s*(\d+)\s*题|回答第\s*(\d+)\s*题)?.*?)\*\*$/)
     if (groupMatch) {
       if (currentQuestion) questions.push(currentQuestion)
       currentQuestion = null
-      groups.push({ label: groupMatch[1], questions: [], questionStart: questions.length + 1 })
+
+      const groupLabel = groupMatch[1]
+      const audioNum = groupMatch[2]
+      const startQ = groupMatch[3] || groupMatch[5]
+      const endQ = groupMatch[4]
+
+      const groupInfo = {
+        label: groupLabel,
+        questions: [],
+        questionStart: questions.length + 1,
+        audioNumber: parseInt(audioNum),
+        questionRange: startQ ? { start: parseInt(startQ), end: endQ ? parseInt(endQ) : parseInt(startQ) } : null
+      }
+
+      if (startQ && endQ && startQ !== endQ) {
+        groupInfo.displayLabel = `听下面${audioNum}段录音，回答第 ${startQ} 至第 ${endQ} 题`
+      } else if (startQ) {
+        groupInfo.displayLabel = `听下面录音，回答第 ${startQ} 题`
+      } else {
+        groupInfo.displayLabel = groupLabel
+      }
+
+      groups.push(groupInfo)
+      lastGroupIndex = groups.length - 1
       continue
     }
 
@@ -46,7 +70,8 @@ function parseQuestions(markdown) {
         no: parseInt(qMatch[1], 10),
         text: unescapeMarkdown(sanitizeText(qMatch[2])),
         options: [],
-        userAnswer: null
+        userAnswer: null,
+        groupId: lastGroupIndex >= 0 ? lastGroupIndex : -1
       }
       continue
     }
@@ -81,10 +106,13 @@ function parseQuestions(markdown) {
   }
 }
 
-function sanitizeText(str) {
-  return String(str).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
+function getGroupDisplayInfo(groups, questionNo) {
+  for (const group of groups) {
+    if (group.questions.includes(questionNo)) {
+      return group
+    }
+  }
+  return null
 }
 
-function unescapeMarkdown(str) {
-  return str.replace(/\\([.\\*_~`#\[\]()])/g, '$1')
-}
+

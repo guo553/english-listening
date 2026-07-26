@@ -1,6 +1,19 @@
-window.page_settings = function () {
+window.page_settings = async function () {
   const container = document.getElementById('page-settings')
-  const settings = loadSettings()
+  const settings = await loadSettingsFromFile()
+
+  const zoomLevels = [
+    { value: 0.75, label: '75%' },
+    { value: 0.875, label: '87.5%' },
+    { value: 1, label: '100% (默认)' },
+    { value: 1.125, label: '112.5%' },
+    { value: 1.25, label: '125%' },
+    { value: 1.5, label: '150%' },
+    { value: 1.75, label: '175%' },
+    { value: 2, label: '200%' }
+  ]
+
+  const fontSizes = [12, 13, 14, 15, 16, 17, 18, 19, 20]
 
   container.innerHTML = `
     <div class="page-header">
@@ -37,6 +50,38 @@ window.page_settings = function () {
         </div>
 
         <div class="card mt-16">
+          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">显示设置</h3>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 10px;">
+              界面缩放: <span id="zoom-value">${(settings.zoom || 1) * 100}%</span>
+            </label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+              ${zoomLevels.map(z => `
+                <button class="zoom-btn ${Math.abs((settings.zoom || 1) - z.value) < 0.01 ? 'active' : ''}"
+                  data-zoom="${z.value}" style="padding: 8px; border-radius: 6px; border: 2px solid ${Math.abs((settings.zoom || 1) - z.value) < 0.01 ? 'var(--accent)' : 'var(--border)'}; background: ${Math.abs((settings.zoom || 1) - z.value) < 0.01 ? 'var(--accent-light)' : 'transparent'}; color: var(--text-primary); cursor: pointer; font-size: 13px; transition: all 0.2s;">
+                  ${z.label}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; font-weight: 500; margin-bottom: 10px;">
+              字体大小: <span id="font-value">${settings.fontSize || 15}px</span>
+            </label>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <input type="range" id="font-range" min="12" max="20" value="${settings.fontSize || 15}"
+                style="flex: 1; accent-color: var(--accent);">
+              <span id="font-display" style="min-width: 40px; text-align: center; font-size: 14px; color: var(--text-secondary);">${settings.fontSize || 15}px</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+              <span>小 (12px)</span><span>大 (20px)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-16">
           <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">外观</h3>
 
           <div style="display: flex; gap: 12px;">
@@ -55,8 +100,27 @@ window.page_settings = function () {
           </div>
         </div>
 
+        <div class="card mt-16">
+          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">更新</h3>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn btn-secondary" id="btn-check-update">检查更新</button>
+            <span id="update-status-text" style="font-size: 13px; color: var(--text-secondary);"></span>
+          </div>
+          <div id="update-progress-bar" style="display: none; margin-top: 10px; height: 6px; background: var(--border-light); border-radius: 3px; overflow: hidden;">
+            <div id="update-progress-fill" style="height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.3s;"></div>
+          </div>
+        </div>
+
+        <div class="card mt-16">
+          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">数据管理</h3>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn btn-secondary" id="btn-clear-data" style="color: var(--error);">🗑 清除所有数据</button>
+            <span style="font-size: 13px; color: var(--text-secondary);">清除后将重置所有设置和记录</span>
+          </div>
+        </div>
+
         <div class="text-center mt-24" style="font-size: 13px; color: var(--text-muted); line-height: 1.8;">
-          <div>听力小工具 v0.0.1dev</div>
+          <div>English Listening Tool v${getAppVersion()}</div>
           <div>作者: 郭皓玮 · MIT 许可</div>
           <div>GitHub: <a href="#" id="about-github" style="color:var(--accent);text-decoration:none;">guo553/english-listening</a></div>
           <div>鸣谢: <a href="#" id="about-electron" style="color:var(--accent);text-decoration:none;">Electron 框架</a></div>
@@ -85,11 +149,36 @@ window.page_settings = function () {
     saveOneSetting('skipSeconds', parseInt(skipRange.value))
   })
 
+  document.querySelectorAll('.zoom-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const zoom = parseFloat(btn.dataset.zoom)
+      saveOneSetting('zoom', zoom)
+      applyZoom(zoom)
+      document.querySelectorAll('.zoom-btn').forEach(b => {
+        const isActive = Math.abs(parseFloat(b.dataset.zoom) - zoom) < 0.01
+        b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)'
+        b.style.background = isActive ? 'var(--accent-light)' : 'transparent'
+      })
+      document.getElementById('zoom-value').textContent = Math.round(zoom * 100) + '%'
+    })
+  })
+
+  const fontRange = document.getElementById('font-range')
+  const fontDisplay = document.getElementById('font-display')
+  const fontValue = document.getElementById('font-value')
+
+  fontRange.addEventListener('input', () => {
+    const size = parseInt(fontRange.value)
+    fontDisplay.textContent = size + 'px'
+    fontValue.textContent = size + 'px'
+    saveOneSetting('fontSize', size)
+    applyFontSize(size)
+  })
+
   document.querySelectorAll('input[name="theme"]').forEach(radio => {
     radio.addEventListener('change', () => {
       if (radio.checked) {
         document.documentElement.setAttribute('data-theme', radio.value)
-        localStorage.setItem('theme', radio.value)
         saveOneSetting('theme', radio.value)
         radio.closest('label').style.borderColor = 'var(--accent)'
         radio.closest('label').style.background = 'var(--accent-light)'
@@ -103,6 +192,17 @@ window.page_settings = function () {
     })
   })
 
+  document.getElementById('btn-clear-data').addEventListener('click', async () => {
+    if (!confirm('确定清除所有数据吗？这将删除所有设置、练习记录和答案数据，此操作不可撤销。')) return
+    try {
+      await window.api.clearAllData()
+      App.toast('已清除所有数据，即将重新加载...', 2000)
+      setTimeout(() => location.reload(), 1000)
+    } catch (err) {
+      App.toast('清除失败: ' + err.message, 3000)
+    }
+  })
+
   document.getElementById('about-github').addEventListener('click', (e) => {
     e.preventDefault()
     window.open('https://github.com/guo553/english-listening', '_blank')
@@ -112,18 +212,57 @@ window.page_settings = function () {
     e.preventDefault()
     window.open('https://www.electronjs.org', '_blank')
   })
+
+  const updateStatusText = document.getElementById('update-status-text')
+  const updateProgressBar = document.getElementById('update-progress-bar')
+  const updateProgressFill = document.getElementById('update-progress-fill')
+
+  document.getElementById('btn-check-update').addEventListener('click', async () => {
+    updateStatusText.textContent = '正在检查更新...'
+    try {
+      await window.api.checkForUpdates()
+    } catch (err) {
+      updateStatusText.textContent = '检查失败: ' + err.message
+    }
+  })
+
+  window.api.onUpdateStatus((data) => {
+    switch (data.type) {
+      case 'available':
+        updateStatusText.textContent = `发现新版本 v${data.version}，正在下载...`
+        break
+      case 'progress':
+        if (data.percent > 0) {
+          updateProgressBar.style.display = 'block'
+          updateProgressFill.style.width = data.percent + '%'
+          updateStatusText.textContent = `下载中... ${data.percent}%`
+        }
+        break
+      case 'downloaded':
+        updateStatusText.textContent = '下载完成，重启后自动安装'
+        updateProgressBar.style.display = 'none'
+        break
+    }
+  })
 }
 
-function loadSettings() {
+function getAppVersion() {
+  return typeof require !== 'undefined' ? require('../../package.json').version : '0.1.0'
+}
+
+async function loadSettingsFromFile() {
   try {
-    return JSON.parse(localStorage.getItem('settings')) || { delaySeconds: 0, skipSeconds: 0, theme: 'auto' }
+    const data = await window.api.storageLoad('__settings__')
+    return data || { delaySeconds: 0, skipSeconds: 0, theme: 'auto', zoom: 1, fontSize: 15 }
   } catch {
-    return { delaySeconds: 0, skipSeconds: 0, theme: 'auto' }
+    return { delaySeconds: 0, skipSeconds: 0, theme: 'auto', zoom: 1, fontSize: 15 }
   }
 }
 
-function saveOneSetting(key, value) {
-  const s = loadSettings()
-  s[key] = value
-  localStorage.setItem('settings', JSON.stringify(s))
+async function saveOneSetting(key, value) {
+  try {
+    const s = await loadSettingsFromFile()
+    s[key] = value
+    await window.api.storageSave('__settings__', s)
+  } catch {}
 }

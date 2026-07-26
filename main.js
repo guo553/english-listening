@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, net, dialog, Menu, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
 
@@ -360,6 +361,23 @@ ipcMain.handle('storage-delete', async (_event, key) => {
   return true
 })
 
+ipcMain.handle('clear-all-data', async () => {
+  const dir = getDataDir()
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'))
+  for (const file of files) {
+    fs.unlinkSync(path.join(dir, file))
+  }
+  return true
+})
+
+ipcMain.handle('check-for-updates', async () => {
+  return autoUpdater.checkForUpdates()
+})
+
+ipcMain.handle('install-update', async () => {
+  autoUpdater.quitAndInstall()
+})
+
 function createAppMenu() {
   const template = [
     {
@@ -419,10 +437,55 @@ function createAppMenu() {
 app.whenReady().then(() => {
   createAppMenu()
   createWindow()
+  checkForUpdates()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+function checkForUpdates() {
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[自动更新] 正在检查更新...')
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[自动更新] 发现新版本:', info.version)
+    if (mainWindow) {
+      mainWindow.webContents.send('update-status', { type: 'available', version: info.version })
+    }
+  })
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[自动更新] 当前已是最新版本')
+  })
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    const percent = Math.round(progressObj.percent)
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('update-status', { type: 'progress', percent })
+    }
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[自动更新] 更新下载完成，将在退出时安装')
+    if (mainWindow) {
+      mainWindow.webContents.send('update-status', { type: 'downloaded' })
+    }
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[自动更新] 错误:', err.message)
+  })
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[自动更新] 检查失败:', err.message)
+    })
+  }, 3000)
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

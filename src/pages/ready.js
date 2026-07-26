@@ -1,4 +1,4 @@
-window.page_ready = function () {
+window.page_ready = async function () {
   const set = App.currentSet
   if (!set) {
     App.navigate('home')
@@ -7,7 +7,7 @@ window.page_ready = function () {
 
   const container = document.getElementById('page-ready')
   const qCount = set.questionData.questions.length
-  const settings = loadSettings()
+  const settings = window._cachedSettings || await loadSettings()
 
   container.innerHTML = `
     <div class="page-scroll">
@@ -61,9 +61,9 @@ window.page_ready = function () {
   })
 }
 
-function loadSettings() {
+async function loadSettings() {
   try {
-    return JSON.parse(localStorage.getItem('settings')) || {}
+    return await window.api.storageLoad('__settings__') || {}
   } catch {
     return {}
   }

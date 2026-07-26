@@ -5,16 +5,96 @@ marked.setOptions({
   mangle: false
 })
 
+const escHtmlCache = new Map()
+
+function escHtmlCached(str) {
+  if (escHtmlCache.has(str)) return escHtmlCache.get(str)
+  const div = document.createElement('div')
+  div.textContent = str
+  const result = div.innerHTML
+  if (escHtmlCache.size < 1000) {
+    escHtmlCache.set(str, result)
+  }
+  return result
+}
+
+function clearEscHtmlCache() {
+  escHtmlCache.clear()
+}
+
+function applyZoom(zoom) {
+  document.documentElement.style.transform = `scale(${zoom})`
+  document.documentElement.style.transformOrigin = 'top left'
+  document.documentElement.style.width = `${100 / zoom}%`
+  document.documentElement.style.height = `${100 / zoom}%`
+  document.documentElement.style.overflow = 'auto'
+}
+
+function applyFontSize(size) {
+  document.documentElement.style.fontSize = size + 'px'
+  document.body.style.fontSize = size + 'px'
+}
+
 const App = {
   currentPage: null,
   currentSet: null,
   allSets: [],
+  _pageCache: {},
 
   init() {
-    const savedTheme = localStorage.getItem('theme') || 'auto'
-    document.documentElement.setAttribute('data-theme', savedTheme)
-    this.initPasswordDialog()
-    this.navigate('home')
+    this.migrateFromLocalStorage().then(() => {
+      this.applyDisplaySettings()
+      this.initPasswordDialog()
+      this.navigate('home')
+    })
+  },
+
+  async migrateFromLocalStorage() {
+    try {
+      let settings = await window.api.storageLoad('__settings__')
+      if (settings) return
+
+      const legacy = localStorage.getItem('settings')
+      if (legacy) {
+        await window.api.storageSave('__settings__', JSON.parse(legacy))
+        localStorage.removeItem('settings')
+      }
+
+      const theme = localStorage.getItem('theme')
+      if (theme) {
+        document.documentElement.setAttribute('data-theme', theme)
+        localStorage.removeItem('theme')
+      }
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('practice_records_')) {
+          const setId = key.replace('practice_records_', '')
+          const data = localStorage.getItem(key)
+          if (data) {
+            await window.api.storageSave('summary_' + setId, JSON.parse(data))
+          }
+        }
+        if (key && key.startsWith('manual_ans_')) {
+          const setId = key.replace('manual_ans_', '')
+          const data = localStorage.getItem(key)
+          if (data) {
+            await window.api.storageSave('manual_' + setId, JSON.parse(data))
+          }
+        }
+      }
+    } catch {}
+  },
+
+  applyDisplaySettings() {
+    window.api.storageLoad('__settings__').then(settings => {
+      if (!settings) return
+      window._cachedSettings = settings
+      if (settings.zoom) applyZoom(settings.zoom)
+      if (settings.fontSize) applyFontSize(settings.fontSize)
+      const theme = settings.theme
+      if (theme) document.documentElement.setAttribute('data-theme', theme)
+    }).catch(() => {})
   },
 
   navigate(page, data) {
@@ -22,13 +102,20 @@ const App = {
     if (this.currentPage && this.currentPage !== 'settings') {
       sessionStorage.setItem('prevPage', this.currentPage)
     }
+
+    const pageEl = document.getElementById('page-' + page)
+    if (!pageEl) return
+
     document.querySelectorAll('.page').forEach(el => el.classList.remove('active'))
-    const el = document.getElementById('page-' + page)
-    if (el) el.classList.add('active')
+    pageEl.classList.add('active')
+
     this.currentPage = page
-    if (typeof window['page_' + page] === 'function') {
-      window['page_' + page](data)
-    }
+
+    requestAnimationFrame(() => {
+      if (typeof window['page_' + page] === 'function') {
+        window['page_' + page](data)
+      }
+    })
   },
 
   toast(msg, duration) {

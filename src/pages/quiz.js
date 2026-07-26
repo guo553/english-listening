@@ -380,6 +380,7 @@ window.page_quiz = function () {
 function renderQuestions(questions, sections, groups, answers) {
   let html = ''
   let currentSectionIdx = 0
+  let lastGroupLabel = null
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
@@ -399,9 +400,27 @@ function renderQuestions(questions, sections, groups, answers) {
     }
 
     const group = groups.find(g => g.questions.includes(q.no))
-    if (group && i > 0 && !groups.find(g => g.questions.includes(questions[i-1].no))) {
-      html += `<div class="group-title" style="font-weight: 500; font-size: 14px; padding: 12px 0 8px;
-        color: var(--accent);">📢 ${escHtml(group.label)}</div>`
+    if (group) {
+      const currentGroupLabel = group.displayLabel || group.label
+      if (currentGroupLabel !== lastGroupLabel) {
+        html += `<div class="group-title" style="font-weight: 500; font-size: 14px; padding: 12px 0 8px;
+          color: var(--accent); background: var(--bg-hover); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+          📢 ${escHtml(currentGroupLabel)}
+        </div>`
+        lastGroupLabel = currentGroupLabel
+      }
+
+      if (i > 0 && questions[i - 1]) {
+        const prevGroup = groups.find(g => g.questions.includes(questions[i - 1].no))
+        if (!prevGroup || prevGroup.label !== group.label) {
+          html += `<div style="height: 8px;"></div>`
+        } else if (group.questionRange && q.no > questions[i - 1].no + 1) {
+          const gapHtml = generateGapHint(group, questions[i - 1].no, q.no)
+          if (gapHtml) {
+            html += gapHtml
+          }
+        }
+      }
     }
 
     const userAns = answers[q.no] || ''
@@ -433,16 +452,35 @@ function renderQuestions(questions, sections, groups, answers) {
   return html
 }
 
+function generateGapHint(group, prevQNo, currentQNo) {
+  if (!group || !group.questionRange) return ''
+
+  const { start, end } = group.questionRange
+
+  if (currentQNo <= prevQNo + 1) return ''
+
+  const missingStart = prevQNo + 1
+  const missingEnd = currentQNo - 1
+
+  if (missingEnd - missingStart >= 2) {
+    return `
+      <div style="padding: 8px 14px; margin: 8px 0; background: var(--bg-card);
+        border-left: 3px solid var(--accent); border-radius: 4px; font-size: 13px;
+        color: var(--text-secondary);">
+        ⏭️ 跳至第 ${currentQNo} 题（第 ${missingStart}-${missingEnd} 题为其他小题组）
+      </div>`
+  }
+
+  return ''
+}
+
 function isNewSection(sections, qNo) {
   return sections.some(s => s.questionStart === qNo)
 }
 
 function loadQuizSettings() {
-  try {
-    return JSON.parse(localStorage.getItem('settings')) || { delaySeconds: 0, skipSeconds: 0 }
-  } catch {
-    return { delaySeconds: 0, skipSeconds: 0 }
-  }
+  if (window._cachedSettings) return window._cachedSettings
+  return { delaySeconds: 0, skipSeconds: 0 }
 }
 
 function escHtml(str) {
