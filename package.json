@@ -26,11 +26,6 @@
       "package.json"
     ],
     "icon": "src/icon.png",
-    "publish": {
-      "provider": "github",
-      "owner": "guo553",
-      "repo": "english-listening"
-    },
     "linux": {
       "target": [
         "AppImage"
@@ -53,7 +48,6 @@
   "devDependencies": {
     "electron": "^33.4.11",
     "electron-builder": "^25.0.0",
-    "electron-updater": "^6.8.9",
     "eslint": "^10.7.0"
   },
   "dependencies": {

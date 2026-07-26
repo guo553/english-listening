@@ -101,17 +101,6 @@ window.page_settings = async function () {
         </div>
 
         <div class="card mt-16">
-          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">更新</h3>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <button class="btn btn-secondary" id="btn-check-update">检查更新</button>
-            <span id="update-status-text" style="font-size: 13px; color: var(--text-secondary);"></span>
-          </div>
-          <div id="update-progress-bar" style="display: none; margin-top: 10px; height: 6px; background: var(--border-light); border-radius: 3px; overflow: hidden;">
-            <div id="update-progress-fill" style="height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.3s;"></div>
-          </div>
-        </div>
-
-        <div class="card mt-16">
           <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">数据管理</h3>
           <div style="display: flex; gap: 12px; align-items: center;">
             <button class="btn btn-secondary" id="btn-clear-data" style="color: var(--error);">🗑 清除所有数据</button>
@@ -213,37 +202,6 @@ window.page_settings = async function () {
     window.open('https://www.electronjs.org', '_blank')
   })
 
-  const updateStatusText = document.getElementById('update-status-text')
-  const updateProgressBar = document.getElementById('update-progress-bar')
-  const updateProgressFill = document.getElementById('update-progress-fill')
-
-  document.getElementById('btn-check-update').addEventListener('click', async () => {
-    updateStatusText.textContent = '正在检查更新...'
-    try {
-      await window.api.checkForUpdates()
-    } catch (err) {
-      updateStatusText.textContent = '检查失败: ' + err.message
-    }
-  })
-
-  window.api.onUpdateStatus((data) => {
-    switch (data.type) {
-      case 'available':
-        updateStatusText.textContent = `发现新版本 v${data.version}，正在下载...`
-        break
-      case 'progress':
-        if (data.percent > 0) {
-          updateProgressBar.style.display = 'block'
-          updateProgressFill.style.width = data.percent + '%'
-          updateStatusText.textContent = `下载中... ${data.percent}%`
-        }
-        break
-      case 'downloaded':
-        updateStatusText.textContent = '下载完成，重启后自动安装'
-        updateProgressBar.style.display = 'none'
-        break
-    }
-  })
 }
 
 function getAppVersion() {

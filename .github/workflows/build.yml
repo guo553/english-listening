@@ -32,28 +32,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Build Linux AppImage
-        run: npx electron-builder --linux --publish never
-      - name: Generate latest-linux.yml
-        run: |
-          APPIMAGE=$(ls dist/*.AppImage | head -1)
-          SIZE=$(stat -c%s "$APPIMAGE")
-          SHA=$(sha512sum "$APPIMAGE" | cut -d' ' -f1 | xxd -r -p | base64 -w0)
-          cat > dist/latest-linux.yml << EOF
-          version: ${{ needs.release.outputs.version }}
-          files:
-            - url: $(basename "$APPIMAGE")
-              sha512: ${SHA}
-              size: ${SIZE}
-          path: $(basename "$APPIMAGE")
-          sha512: ${SHA}
-          releaseDate: $(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
-          EOF
+        run: npx electron-builder --linux
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: |
-            dist/*.AppImage
-            dist/latest-linux.yml
+          path: dist/*.AppImage
 
   win:
     needs: release
@@ -66,31 +49,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Build Windows
-        run: npx electron-builder --win --publish never
-      - name: Generate latest.yml (Windows)
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem dist/*.exe | Select-Object -First 1
-          $hex = (Get-FileHash $exe.FullName -Algorithm SHA512).Hash
-          $bytes = for ($i = 0; $i -lt $hex.Length; $i += 2) { [Convert]::ToByte($hex.Substring($i, 2), 16) }
-          $b64 = [Convert]::ToBase64String($bytes)
-          $size = $exe.Length
-          @"
-          version: ${{ needs.release.outputs.version }}
-          files:
-            - url: $($exe.Name)
-              sha512: $b64
-              size: $size
-          path: $($exe.Name)
-          sha512: $b64
-          releaseDate: $(Get-Date -Format "yyyy-MM-ddTHH:mm:ss.000Z")
-          "@ | Out-File -FilePath dist/latest.yml -Encoding utf8NoBOM
+        run: npx electron-builder --win
       - uses: actions/upload-artifact@v4
         with:
           name: win
-          path: |
-            dist/*.exe
-            dist/latest.yml
+          path: dist/*.exe
 
   mac:
     needs: release
@@ -104,30 +67,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Build macOS
-        run: npx electron-builder --mac --publish never
-      - name: Generate latest-mac.yml
-        run: |
-          DMG=$(ls dist/*.dmg 2>/dev/null | head -1)
-          if [ -n "$DMG" ]; then
-            SIZE=$(stat -f%z "$DMG")
-            SHA=$(shasum -a 512 "$DMG" | cut -d' ' -f1 | xxd -r -p | base64)
-            cat > dist/latest-mac.yml << EOF
-          version: ${{ needs.release.outputs.version }}
-          files:
-            - url: $(basename "$DMG")
-              sha512: ${SHA}
-              size: ${SIZE}
-          path: $(basename "$DMG")
-          sha512: ${SHA}
-          releaseDate: $(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
-          EOF
-          fi
+        run: npx electron-builder --mac
       - uses: actions/upload-artifact@v4
         with:
           name: mac
-          path: |
-            dist/*.dmg
-            dist/latest-mac.yml
+          path: dist/*.dmg
 
   publish:
     needs: [release, linux, win, mac]
@@ -137,9 +81,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f -ls
 
       - uses: softprops/action-gh-release@v2
         with:
