@@ -26,7 +26,7 @@ async function proxyDownload(url) {
   return new Response(resp.body, { status: 200, headers })
 }
 
-function renderPage(tag) {
+function renderPage(tag, version) {
   const downloadUrl = (p) => `${RELEASE_BASE}/${tag}/${ASSETS[p].file.replace('{version}', version)}`
 
   return `<!DOCTYPE html>
@@ -58,7 +58,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .btn-mac{background:#fce4ec;color:#c62828}
 .install-step{background:#f5f5f7;border-radius:8px;padding:14px 18px;margin:8px 0;font-size:14px}
 .install-step code{background:#e8e8ed;padding:2px 6px;border-radius:4px;font-size:13px}
-.apple-rant{background:#fff3e0;border-left:4px solid#ff6f00;padding:14px 18px;border-radius:0 8px 8px 0;margin:12px 0;font-size:14px;color:#4e342e}
+.apple-rant{background:#fff3e0;border-left:4px solid #ff6f00;padding:14px 18px;border-radius:0 8px 8px 0;margin:12px 0;font-size:14px;color:#4e342e}
 .build-info{font-size:13px;color:#6e6e73;text-align:center;margin-top:32px;line-height:1.8}
 .build-info a{color:#0071e3;text-decoration:none}
 </style>
@@ -204,7 +204,7 @@ export default {
     }
 
     // 主页
-    return new Response(renderPage(tag), {
+    return new Response(renderPage(tag, version), {
       headers: { 'Content-Type': 'text/html;charset=utf-8' }
     })
   }
