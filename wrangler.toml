@@ -12,3 +12,7 @@ routes = [
 # 最新 Release 版本号，发新版时更新此值
 [vars]
 LATEST_TAG = "v0.2.0"
+
+[observability.logs]
+enabled = false
+invocation_logs = true
