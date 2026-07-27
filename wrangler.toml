@@ -14,7 +14,7 @@ routes = [
 LATEST_TAG = "v0.2.0"
 
 [observability.logs]
-enabled = false
+enabled = true
 invocation_logs = true
 
 [observability.traces]
