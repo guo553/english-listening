@@ -16,3 +16,6 @@ LATEST_TAG = "v0.2.0"
 [observability.logs]
 enabled = false
 invocation_logs = true
+
+[observability.traces]
+enabled = true
