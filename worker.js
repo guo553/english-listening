@@ -15,15 +15,16 @@ const ASSETS = {
   mac:    { file: 'English.Listening.Tool-{version}-universal.dmg',  label: 'macOS Universal (.dmg)' },
 }
 
-// 从 GitHub Release 反代下载文件
-async function proxyDownload(url) {
-  const resp = await fetch(url, {
-    cf: { cacheTtl: 86400, cacheEverything: true }
+// 从 GitHub Release 重定向下载（302 跳转，走 GitHub CDN 直连）
+// ☝️ Cloudflare Cache Rule 可选配置：
+//    域名 → 你的 worker 域名 / 路径前缀 /download/
+//    设置 Cache Everything + Edge TTL 365 天
+//    这样首次请求后边缘节点缓存重定向响应，后续瞬间返回
+function redirectDownload(url) {
+  return new Response(null, {
+    status: 302,
+    headers: { 'Location': url, 'Cache-Control': 'public, max-age=86400' }
   })
-  if (!resp.ok) return new Response('下载失败', { status: 502 })
-  const headers = new Headers(resp.headers)
-  headers.set('Cache-Control', 'public, max-age=86400')
-  return new Response(resp.body, { status: 200, headers })
 }
 
 function renderPage(tag, version) {
@@ -200,7 +201,7 @@ export default {
       const info = ASSETS[platform]
       if (!info) return new Response('不支持的平台', { status: 404 })
       const downloadUrl = `${RELEASE_BASE}/${tag}/${info.file.replace('{version}', version)}`
-      return proxyDownload(downloadUrl)
+      return redirectDownload(downloadUrl)
     }
 
     // 主页
