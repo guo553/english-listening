@@ -1,4 +1,5 @@
-// 主页：二维码/链接输入、解析套题、历史摘要
+// ===== 主页 =====
+// 二维码/链接输入、解析套题、显示最近练习记录摘要
 window.page_home = async function () {
   const container = document.getElementById('page-home')
 
@@ -220,7 +221,9 @@ window.page_home = async function () {
     App.navigate('history')
   })
 
-  // 粘贴按钮（二维码区内的按钮）：从剪贴板读取图片或文本
+  // 粘贴按钮：从剪贴板读取图片或文本
+  // 优先读图片（二维码截图），没有图片再读文本中的 URL
+  // 使用 navigator.clipboard.read() 而非 .readText() 以支持图片格式
   document.getElementById('qr-paste-btn').addEventListener('click', async () => {
     try {
       // 优先读取剪贴板中的图片（二维码截图）
@@ -311,16 +314,20 @@ window.page_home = async function () {
     }
   })
 
-  // 加载主页历史摘要
+  // 加载主页历史摘要：从 __sets__.json 读取最近 5 条记录
+  // 数据链：__sets__.json（套题概要）← summary_{setId}.json（练习摘要数组）← practice_{id}.json（完整记录）
+  // __sets__.json 由 savePracticeRecord 每次保存时同步更新
+  // 此函数只展示概要信息，点击「查看」时才读取完整记录跳转到结果页
   loadHistorySummary()
 }
 
 // 从 __sets__.json 全局索引读取最近的练习记录摘要
-// __sets__.json 由 savePracticeRecord 每次保存时同步更新
+// 数据链：__sets__.json（套题概要）← summary_{setId}.json（练习摘要数组）← practice_{id}.json（完整记录）
+// __sets__.json 由 savePracticeRecord 每次保存时同步更新，key = setId
 async function loadHistorySummary() {
   const list = document.getElementById('history-list')
   try {
-    // 读取全局套题索引，key = setId, value = {title, accuracy, practiceCount, timestamp}
+    // 读取全局套题索引，结构：{ [setId]: { title, accuracy, practiceCount, timestamp, grade, sourceUrl } }
     const index = await window.api.storageLoad('__sets__') || {}
     const setIds = Object.keys(index)
 
@@ -358,6 +365,8 @@ async function loadHistorySummary() {
     }).join('')
 
     // 点击「查看」→ 读取该套题的最新一次练习记录并跳转结果页
+    // 数据读取链路：summary_{setId}.json（练习摘要数组）→ 取最后一项的 practiceId
+    // → storageLoad(practiceId) 加载完整记录（含答题详情、批改结果）→ navigate('result')
     list.querySelectorAll('[data-action="view"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation()

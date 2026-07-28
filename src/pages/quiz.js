@@ -1,3 +1,6 @@
+// ===== 答题页 =====
+// 加载音频播放器，展示题目和选项，监听用户作答和键盘操作
+// 提交答案后跳转到结果页，答题进度不会被保存（退出即丢弃）
 window.page_quiz = function () {
   const set = App.currentSet
   if (!set || !set.audioUrl) {
@@ -110,6 +113,7 @@ window.page_quiz = function () {
   initProgressBar()
   initKeyboard()
 
+  // 初始化音频播放器：加载音频源，设置跳过开头秒数，处理延迟播放倒计时
   function initAudio() {
     audio = new Audio(set.audioUrl)
     audio.preload = 'auto'

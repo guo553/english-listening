@@ -1,3 +1,5 @@
+// ===== 设置页 =====
+// 考试设置（延迟播放、跳过开头）、显示设置（缩放、字体）、外观（主题切换）、数据管理（清除所有数据）
 window.page_settings = async function () {
   const container = document.getElementById('page-settings')
   const settings = await loadSettingsFromFile()

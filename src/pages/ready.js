@@ -1,3 +1,5 @@
+// ===== 准备页 =====
+// 开始听力前显示套题信息（题目数量、播放延迟、跳过开头），点击「开始听力」跳转到答题页
 window.page_ready = async function () {
   const set = App.currentSet
   if (!set) {

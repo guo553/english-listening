@@ -1,3 +1,5 @@
+// ===== 结果页 =====
+// 展示答题结果（正确率、用时、答案详情），支持自动批改/手动录入、成绩趋势、CSV 导出、再练一次
 window.page_result = async function (data) {
   const container = document.getElementById('page-result')
   const set = App.currentSet

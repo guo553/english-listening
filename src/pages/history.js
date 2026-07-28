@@ -1,3 +1,5 @@
+// ===== 历史页 =====
+// 按套题分组显示所有练习记录，支持展开详情、查看具体结果、再练一次、删除单套题、导出全部 CSV
 window.page_history = function () {
   const container = document.getElementById('page-history')
 
