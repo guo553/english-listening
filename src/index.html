@@ -7,15 +7,17 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- 页面容器：每个页面由独立的 div 承载，通过 active class 切换显示 -->
   <div id="app">
-    <div id="page-home" class="page active"></div>
-    <div id="page-ready" class="page"></div>
-    <div id="page-quiz" class="page"></div>
-    <div id="page-result" class="page"></div>
-    <div id="page-settings" class="page"></div>
-    <div id="page-history" class="page"></div>
+    <div id="page-home" class="page active"></div>    <!-- 主页：二维码上传、URL 输入 -->
+    <div id="page-ready" class="page"></div>           <!-- 准备页：开始听力前显示套题信息 -->
+    <div id="page-quiz" class="page"></div>            <!-- 答题页：音频播放、选择题作答 -->
+    <div id="page-result" class="page"></div>          <!-- 结果页：批改结果、答案详情 -->
+    <div id="page-settings" class="page"></div>        <!-- 设置页：延迟、跳过、缩放、主题 -->
+    <div id="page-history" class="page"></div>         <!-- 历史页：所有练习记录 -->
   </div>
 
+  <!-- 密码输入对话框：自动批改时弹出，由 CSS class hidden 控制显示/隐藏 -->
   <div id="password-dialog" class="dialog-overlay hidden">
     <div class="dialog-box">
       <div class="dialog-title">输入答案密码</div>
@@ -30,20 +32,28 @@
     </div>
   </div>
 
+  <!-- Toast 提示：短暂显示操作结果 -->
   <div id="toast" class="toast"></div>
 
-  <script src="../node_modules/jsqr/dist/jsQR.js"></script>
-  <script src="../node_modules/marked/lib/marked.umd.js"></script>
-  <script src="../node_modules/dompurify/dist/purify.js"></script>
-  <script src="lib/parser.js"></script>
-  <script src="lib/qrcode.js"></script>
-  <script src="lib/md-parser.js"></script>
-  <script src="app.js"></script>
-  <script src="pages/home.js"></script>
-  <script src="pages/ready.js"></script>
-  <script src="pages/quiz.js"></script>
-  <script src="pages/result.js"></script>
-  <script src="pages/settings.js"></script>
-  <script src="pages/history.js"></script>
+  <!-- 第三方库（本地 node_modules 中的 UMD 包，通过 electron-builder 打包时自动包含） -->
+  <script src="../node_modules/jsqr/dist/jsQR.js"></script>          <!-- 二维码解码 -->
+  <script src="../node_modules/marked/lib/marked.umd.js"></script>    <!-- Markdown 渲染 -->
+  <script src="../node_modules/dompurify/dist/purify.js"></script>   <!-- HTML 安全过滤 -->
+
+  <!-- 本地库（按依赖顺序加载：解析器 → 二维码 → 题目解析） -->
+  <script src="lib/parser.js"></script>    <!-- 页面内容提取：从 HTML 中解析 markdown、音频、标题 -->
+  <script src="lib/qrcode.js"></script>    <!-- 二维码解码：从文件或 base64 图片中识别二维码 -->
+  <script src="lib/md-parser.js"></script> <!-- 题目解析：将 markdown 文本解析为结构化题目数据 -->
+
+  <!-- 应用主逻辑 -->
+  <script src="app.js"></script>           <!-- 核心 App 对象：页面导航、设置管理、密码弹窗 -->
+
+  <!-- 页面渲染脚本（每个页面一个独立文件，由 App.navigate 按需调用） -->
+  <script src="pages/home.js"></script>     <!-- 主页逻辑 -->
+  <script src="pages/ready.js"></script>    <!-- 准备页逻辑 -->
+  <script src="pages/quiz.js"></script>     <!-- 答题页逻辑 -->
+  <script src="pages/result.js"></script>   <!-- 结果页逻辑 -->
+  <script src="pages/settings.js"></script> <!-- 设置页逻辑 -->
+  <script src="pages/history.js"></script>  <!-- 历史页逻辑 -->
 </body>
 </html>
