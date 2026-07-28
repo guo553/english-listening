@@ -204,7 +204,7 @@ export default {
       if (platform === 'source') {
         return new Response(null, {
           status: 302,
-          headers: { 'Location': `https://github.com/${GH_OWNER}/${GH_REPO}/archive/refs/heads/main.zip`, 'Cache-Control': 'public, max-age=86400' }
+          headers: { 'Location': `/gh/https://github.com/${GH_OWNER}/${GH_REPO}/archive/refs/heads/main.zip`, 'Cache-Control': 'public, max-age=86400' }
         })
       }
       const info = ASSETS[platform]
