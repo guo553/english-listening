@@ -35,25 +35,54 @@
   <!-- Toast 提示：短暂显示操作结果 -->
   <div id="toast" class="toast"></div>
 
-  <!-- 第三方库（本地 node_modules 中的 UMD 包，通过 electron-builder 打包时自动包含） -->
-  <script src="../node_modules/jsqr/dist/jsQR.js"></script>          <!-- 二维码解码 -->
-  <script src="../node_modules/marked/lib/marked.umd.js"></script>    <!-- Markdown 渲染 -->
-  <script src="../node_modules/dompurify/dist/purify.js"></script>   <!-- HTML 安全过滤 -->
+  <!--
+    ===== JavaScript 加载说明 =====
+    加载顺序严格按依赖关系排列，必须保持此顺序：
 
-  <!-- 本地库（按依赖顺序加载：解析器 → 二维码 → 题目解析） -->
-  <script src="lib/parser.js"></script>    <!-- 页面内容提取：从 HTML 中解析 markdown、音频、标题 -->
-  <script src="lib/qrcode.js"></script>    <!-- 二维码解码：从文件或 base64 图片中识别二维码 -->
-  <script src="lib/md-parser.js"></script> <!-- 题目解析：将 markdown 文本解析为结构化题目数据 -->
+    块 1：第三方库（通过 CDN 或 node_modules 加载，作为全局变量注入）
+    ───────────────────────────────────────────
+    jsQR      → 全局 window.jsQR（二维码像素级解码）
+    marked    → 全局 window.marked（markdown → HTML）
+    DOMPurify → 全局 window.DOMPurify（HTML 安全过滤，防 XSS）
 
-  <!-- 应用主逻辑 -->
-  <script src="app.js"></script>           <!-- 核心 App 对象：页面导航、设置管理、密码弹窗 -->
+    块 2：本地工具库（定义全局函数，被 lib/ 内部互相调用）
+    ───────────────────────────────────────────
+    parser.js   → parsePageFromUrl / extractXxx 系列（从页面提取 markdown、音频、标题、年级）
+    qrcode.js   → decodeQRFromFile / decodeQRFromBase64（调用 jsQR 解码）
+    md-parser.js → parseQuestions（将提取的 markdown 解析为 {questions, sections, groups}）
 
-  <!-- 页面渲染脚本（每个页面一个独立文件，由 App.navigate 按需调用） -->
-  <script src="pages/home.js"></script>     <!-- 主页逻辑 -->
-  <script src="pages/ready.js"></script>    <!-- 准备页逻辑 -->
-  <script src="pages/quiz.js"></script>     <!-- 答题页逻辑 -->
-  <script src="pages/result.js"></script>   <!-- 结果页逻辑 -->
-  <script src="pages/settings.js"></script> <!-- 设置页逻辑 -->
-  <script src="pages/history.js"></script>  <!-- 历史页逻辑 -->
+    块 3：应用核心（依赖块 1 的全局变量和块 2 的解析函数）
+    ───────────────────────────────────────────
+    app.js      → 定义 App 全局对象（init / navigate / toast / initPasswordDialog / renderMarkdown）
+                  注册 DOMContentLoaded 事件启动 App.init()
+
+    块 4：页面渲染脚本（定义 window.page_{name} 函数，由 App.navigate 按需调用）
+    ───────────────────────────────────────────
+    home.js     → page_home   主页（二维码上传、URL 输入、历史摘要）
+    ready.js    → page_ready  准备页（显示套题信息，点击开始跳到 quiz）
+    quiz.js     → page_quiz   答题页（音频播放、选项选择、提交答案）
+    result.js   → page_result 结果页（批改结果、答案详情、成绩趋势、CSV 导出）
+    settings.js → page_settings 设置页（延迟、跳过、缩放、字体、主题、清除数据）
+    history.js  → page_history 历史页（所有套题的练习记录、详情展开、删除、导出全部）
+
+    注意：所有脚本都是同步加载（非 async/defer），确保执行顺序。
+    DOMContentLoaded 事件在所有脚本执行完毕后触发，此时 App.init() 才会运行。
+  -->
+  <script src="../node_modules/jsqr/dist/jsQR.js"></script>
+  <script src="../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../node_modules/dompurify/dist/purify.js"></script>
+
+  <script src="lib/parser.js"></script>
+  <script src="lib/qrcode.js"></script>
+  <script src="lib/md-parser.js"></script>
+
+  <script src="app.js"></script>
+
+  <script src="pages/home.js"></script>
+  <script src="pages/ready.js"></script>
+  <script src="pages/quiz.js"></script>
+  <script src="pages/result.js"></script>
+  <script src="pages/settings.js"></script>
+  <script src="pages/history.js"></script>
 </body>
 </html>
