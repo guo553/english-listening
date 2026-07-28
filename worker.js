@@ -83,6 +83,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .btn-linux{background:#e8f0fe;color:#1a73e8}
 .btn-win{background:#e8f5e9;color:#2e7d32}
 .btn-mac{background:#fce4ec;color:#c62828}
+.btn-source{background:#f3e5f5;color:#7b1fa2}
 .install-step{background:#f5f5f7;border-radius:8px;padding:14px 18px;margin:8px 0;font-size:14px}
 .install-step code{background:#e8e8ed;padding:2px 6px;border-radius:4px;font-size:13px}
 .apple-rant{background:#fff3e0;border-left:4px solid #ff6f00;padding:14px 18px;border-radius:0 8px 8px 0;margin:12px 0;font-size:14px;color:#4e342e}
@@ -124,6 +125,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
       </a>
       <a class="btn-download btn-mac" href="/gh/${RELEASE_BASE}/${tag}/${ASSETS.mac.file.replace('{version}', version)}">
         <span class="icon">🍎</span>macOS<span class="size">Universal .dmg</span>
+      </a>
+      <a class="btn-download btn-source" href="/download/source">
+        <span class="icon">📦</span>源码<span class="size">.zip</span>
       </a>
     </div>
   </div>
@@ -196,6 +200,13 @@ export default {
     // 向下兼容：/download/linux 等 → 跳转到 /gh/ 路径
     if (path.startsWith('/download/')) {
       const platform = path.replace('/download/', '')
+      // 源码下载
+      if (platform === 'source') {
+        return new Response(null, {
+          status: 302,
+          headers: { 'Location': `https://github.com/${GH_OWNER}/${GH_REPO}/archive/refs/heads/main.zip`, 'Cache-Control': 'public, max-age=86400' }
+        })
+      }
       const info = ASSETS[platform]
       if (!info) return new Response('不支持的平台', { status: 404 })
       const ghUrl = `${RELEASE_BASE}/${tag}/${info.file.replace('{version}', version)}`
